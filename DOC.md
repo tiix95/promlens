@@ -663,7 +663,8 @@ Saves node positions and view toggle states. Body must be a JSON object.
   "gw":              {"x": 120.5, "y": -45.2},
   "__srv__host1:9100": {"x": 300.0, "y": 80.0},
   "__zonesVisible":   true,
-  "__tunnelsVisible": false
+  "__tunnelsVisible": false,
+  "__guestHidden":    {"vm-down": true}
 }
 ```
 
@@ -969,7 +970,7 @@ ifaceRatio = max(rx, tx) / speed
 | Save (grid) | Calls `POST /api/layout` with current positions and toggle states |
 | Select mode | Enables rubber-band selection (drag to select multiple nodes) |
 | Fullscreen | Enters fullscreen mode; shows a floating toolbar |
-| VUES dropdown | Toggles zones, tunnels, ICMP-UP links, SSH-UP links, legend |
+| VIEWS dropdown | Toggles zones, tunnels, ICMP-UP links, SSH-UP links, legend, and guest visibility by kind and state |
 | Refresh interval | 10s / 30s / 1m / 5m / off |
 | Search | Focus and blink a node by label or ID (press `/` to focus the input) |
 
@@ -979,6 +980,26 @@ ifaceRatio = max(rx, tx) / speed
 - Blackbox edge: opens Prometheus graph for `probe_success{instance="..."}`.
 - WireGuard tunnel: opens Prometheus graph for RX/TX of the WireGuard interface.
 - Normal server link: opens Prometheus graph for RX/TX of the server instance.
+
+#### Guest visibility toggles
+
+Nine toggles in the VIEWS dropdown hide guest nodes by kind and state. All are visible (checked) by default. Turning one off hides the matching nodes and every edge touching them.
+
+| Kind | Topology `type` | Toggles |
+|---|---|---|
+| vm | `vm` | VM UNMONITORED / VM DOWN / VM UP |
+| lxc | `lxc` | LXC UNMONITORED / LXC DOWN / LXC UP |
+| pod | `kube` | POD UNMONITORED / POD DOWN / POD UP |
+
+Nodes of any other type (`cloud`, `router`, `firewall`, `switch`, `zigbee`, `wifi`) have no kind and are never affected by these toggles.
+
+State is resolved in `buildGraph`:
+
+- Every topology node starts as `unmonitored`.
+- Phase 5: a node merged with a Prometheus `up` instance becomes `up` (`up == 1`) or `down` (`up == 0`). A non-numeric value leaves it `unmonitored`.
+- VM nodes created from the libvirt exporter (VMs with no `node_exporter` of their own) always get kind `vm`; their state comes from the libvirt domain state metric: `1` (running) -> `up`, any other numeric value (shut off, paused, crashed, pmsuspended) -> `down`, non-numeric -> `unmonitored`.
+
+Toggle states are saved by `POST /api/layout` under `__guestHidden`, an object mapping `"<kind>-<state>"` (for example `"vm-down"`) to a boolean meaning *hidden*. The legacy keys `__libvirtShutOffHidden` and `__libvirtUpHidden` are ignored when an older layout is loaded.
 
 ### Vis.js physics settings
 

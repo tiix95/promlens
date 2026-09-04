@@ -145,6 +145,7 @@ Reference complete et exemples : voir [DOC.fr.md](DOC.fr.md)
 - Sondes blackbox -- liens de sonde ICMP, SSH, TCP connect, HTTP/HTTPS et etat par noeud
 - Cameras Frigate -- un noeud par camera, vert=en ligne, rouge=hors ligne
 - VMs libvirt -- liste des VMs avec leur etat dans les tooltips de l'hyperviseur
+- Visibilite des invites -- masquer les noeuds VM / LXC / POD par etat (unmonitored, down, up) depuis le menu VIEWS
 - Layout persistant -- positions et etats d'affichage sauvegardes cote serveur
 - Webhooks d'alerte -- notifications cote serveur pour les alertes calculees par ProMLens lui-meme (seuils, noeud down, unites systemd en echec), aucune regle d'alerting Prometheus requise
 - Rechargement de configuration -- le bouton RELOAD valide et recharge a chaud les deux fichiers YAML

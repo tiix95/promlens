@@ -663,7 +663,8 @@ Sauvegarde les positions de noeuds et l'état des bascules d'affichage. Le corps
   "gw":              {"x": 120.5, "y": -45.2},
   "__srv__host1:9100": {"x": 300.0, "y": 80.0},
   "__zonesVisible":   true,
-  "__tunnelsVisible": false
+  "__tunnelsVisible": false,
+  "__guestHidden":    {"vm-down": true}
 }
 ```
 
@@ -969,7 +970,7 @@ ifaceRatio = max(rx, tx) / speed
 | Save (grille) | Appelle `POST /api/layout` avec les positions et l'état des bascules courants |
 | Mode sélection | Active la sélection par rectangle élastique (glisser pour sélectionner plusieurs noeuds) |
 | Plein écran | Passe en plein écran ; affiche une barre d'outils flottante |
-| Menu VUES | Bascule les zones, les tunnels, les liens ICMP-UP, les liens SSH-UP, la légende |
+| Menu VIEWS | Bascule les zones, les tunnels, les liens ICMP-UP, les liens SSH-UP, la légende, et la visibilité des invités par type et par état |
 | Intervalle de rafraîchissement | 10s / 30s / 1m / 5m / off |
 | Recherche | Cible et fait clignoter un noeud par libellé ou par ID (appuyez sur `/` pour placer le focus dans le champ) |
 
@@ -979,6 +980,26 @@ ifaceRatio = max(rx, tx) / speed
 - Lien blackbox : ouvre le graphe Prometheus de `probe_success{instance="..."}`.
 - Tunnel WireGuard : ouvre le graphe Prometheus des RX/TX de l'interface WireGuard.
 - Lien serveur normal : ouvre le graphe Prometheus des RX/TX de l'instance serveur.
+
+#### Bascules de visibilité des invités
+
+Neuf bascules du menu VIEWS masquent les noeuds invités par type et par état. Toutes sont visibles (cochées) par défaut. Désactiver une bascule masque les noeuds correspondants et tous les liens qui les touchent.
+
+| Type | `type` de topologie | Bascules |
+|---|---|---|
+| vm | `vm` | VM UNMONITORED / VM DOWN / VM UP |
+| lxc | `lxc` | LXC UNMONITORED / LXC DOWN / LXC UP |
+| pod | `kube` | POD UNMONITORED / POD DOWN / POD UP |
+
+Les noeuds de tout autre type (`cloud`, `router`, `firewall`, `switch`, `zigbee`, `wifi`) n'ont pas de type invité et ne sont jamais affectés par ces bascules.
+
+L'état est résolu dans `buildGraph` :
+
+- Chaque noeud de topologie démarre à `unmonitored`.
+- Phase 5 : un noeud fusionné avec une instance Prometheus `up` passe à `up` (`up == 1`) ou `down` (`up == 0`). Une valeur non numérique le laisse à `unmonitored`.
+- Les noeuds VM créés depuis l'exporteur libvirt (VM sans `node_exporter` propre) reçoivent toujours le type `vm` ; leur état vient de la métrique d'état de domaine libvirt : `1` (running) -> `up`, toute autre valeur numérique (shut off, paused, crashed, pmsuspended) -> `down`, non numérique -> `unmonitored`.
+
+L'état des bascules est sauvegardé par `POST /api/layout` sous la clé `__guestHidden`, un objet associant `"<kind>-<state>"` (par exemple `"vm-down"`) à un booléen signifiant *masqué*. Les clés historiques `__libvirtShutOffHidden` et `__libvirtUpHidden` sont ignorées au chargement d'un layout plus ancien.
 
 ### Paramètres physiques Vis.js
 
