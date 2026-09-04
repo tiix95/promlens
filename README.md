@@ -145,6 +145,7 @@ Full reference and examples: see [DOC.md](DOC.md)
 - Blackbox probes — ICMP, SSH, TCP connect, HTTP/HTTPS probe links and per-node status
 - Frigate cameras — one node per camera, green=online, red=offline
 - Libvirt VMs — VM list with state in hypervisor tooltips
+- Guest visibility — hide VM / LXC / POD nodes per state (unmonitored, down, up) from the VIEWS menu
 - Persistent layout — positions and toggle state saved server-side
 - Alert webhooks — server-side notifications for the alerts ProMLens computes itself (thresholds, node down, failed systemd units), no Prometheus alerting rule required
 - Config reload — RELOAD button validates and hot-reloads both YAML files

@@ -144,7 +144,7 @@
 
     /* -- VIEWS DROPDOWN -- */
     .views-wrap{position:relative}
-    #viewsPanel{position:absolute;top:calc(100% + 8px);right:0;background:var(--bg2);border:1px solid var(--border-hi);border-radius:var(--radius);padding:5px 0;min-width:210px;z-index:200;display:none;box-shadow:0 10px 28px rgba(0,0,0,.6);backdrop-filter:blur(8px)}
+    #viewsPanel{position:absolute;top:calc(100% + 8px);right:0;background:var(--bg2);border:1px solid var(--border-hi);border-radius:var(--radius);padding:5px 0;min-width:210px;max-height:min(75vh,560px);overflow-y:auto;z-index:200;display:none;box-shadow:0 10px 28px rgba(0,0,0,.6);backdrop-filter:blur(8px)}
     #viewsPanel.open{display:block}
     .views-item{display:flex;align-items:center;gap:9px;padding:8px 14px;cursor:pointer;user-select:none;transition:background .1s}
     .views-item:hover{background:var(--bg3)}
@@ -262,14 +262,51 @@
               <span class="views-check">✓</span>
             </div>
             <div class="views-sep"></div>
-            <div class="views-item on" data-key="libvirt-up">
-              <span class="views-icon">▶</span>
-              <span class="views-label">VM UP NO NODE</span>
+            <div class="views-item on" data-key="vm-unmonitored">
+              <span class="views-icon">◌</span>
+              <span class="views-label">VM UNMONITORED</span>
               <span class="views-check">✓</span>
             </div>
-            <div class="views-item on" data-key="libvirt-off">
+            <div class="views-item on" data-key="vm-down">
               <span class="views-icon">□</span>
-              <span class="views-label">VM SHUT OFF</span>
+              <span class="views-label">VM DOWN</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-item on" data-key="vm-up">
+              <span class="views-icon">▶</span>
+              <span class="views-label">VM UP</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-sep"></div>
+            <div class="views-item on" data-key="lxc-unmonitored">
+              <span class="views-icon">◌</span>
+              <span class="views-label">LXC UNMONITORED</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-item on" data-key="lxc-down">
+              <span class="views-icon">□</span>
+              <span class="views-label">LXC DOWN</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-item on" data-key="lxc-up">
+              <span class="views-icon">▶</span>
+              <span class="views-label">LXC UP</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-sep"></div>
+            <div class="views-item on" data-key="pod-unmonitored">
+              <span class="views-icon">◌</span>
+              <span class="views-label">POD UNMONITORED</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-item on" data-key="pod-down">
+              <span class="views-icon">□</span>
+              <span class="views-label">POD DOWN</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-item on" data-key="pod-up">
+              <span class="views-icon">▶</span>
+              <span class="views-label">POD UP</span>
               <span class="views-check">✓</span>
             </div>
             <div class="views-sep"></div>
@@ -604,6 +641,9 @@ const TYPE_CFG = {
   wifi:     { iconFn: 'wifi',     color: '#4fc3f7', size: 26 },
   zone:     { iconFn: 'zone',     color: '#9b6dff', size: 24 },
 };
+
+// Guest node types that the VIEWS dropdown can hide per state (topology type -> kind)
+const GUEST_KIND = { vm: 'vm', lxc: 'lxc', kube: 'pod' };
 
 function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFailed = {}, instLabel = 'instance', blackboxData = null, blackboxSshData = null, libvirtData = null, libvirtInstLabel = 'instance', frigateData = null, frigateConfig = null, tcpData = null, httpData = null, httpNodeLabel = 'upstream', thrColors = true) {
   const DEFAULT_CAP = 1e9;
@@ -978,6 +1018,8 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       font: { color: topoColor, size: 10, face: 'JetBrains Mono', bold: true },
       title: tipEl(tipRows),
       _iconFn: tc.iconFn,
+      _kind: GUEST_KIND[n.type] || null,
+      _state: 'unmonitored', // overwritten by Phase 5 when a Prometheus instance matches
     });
 
     if (n.parent) {
@@ -1346,6 +1388,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
         topoNode.image = ICON[tc.iconFn](color);
         topoNode.font  = { ...topoNode.font, color };
         topoNode.title = tipEl(lines);
+        topoNode._state = unknown ? 'unmonitored' : isUp ? 'up' : 'down';
         if (isUp && thrColors && metricPeak >= 1.0) blinkNodes.add(topoId);
       }
       return;
@@ -1717,8 +1760,8 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const vmId = `__libvirt__${hvHost}__${domain}`;
       nodes.push({
         id: vmId,
-        _libvirtOff: color === '#c084fc',
-        _libvirtUp:  color === '#2dba6e',
+        _kind:  'vm',
+        _state: isNaN(v) ? 'unmonitored' : v === 1 ? 'up' : 'down',
         label: short,
         shape: 'image',
         image: ICON.vm(color),
@@ -2154,9 +2197,13 @@ let _nodeClickTimer     = null;
 let zonesVisible         = true;
 let tunnelsVisible       = true;
 let blackboxUpHidden     = true;
-let libvirtShutOffHidden = false;
-let libvirtUpHidden      = false;
 let blackboxSshUpHidden  = true;
+// Hidden guest nodes; keys match `${node._kind}-${node._state}`
+let guestHidden = {
+  'vm-unmonitored':  false, 'vm-down':  false, 'vm-up':  false,
+  'lxc-unmonitored': false, 'lxc-down': false, 'lxc-up': false,
+  'pod-unmonitored': false, 'pod-down': false, 'pod-up': false,
+};
 let legendVisible     = true;
 let lastGraphData        = null;
 let lastAlerts           = [];
@@ -3135,12 +3182,11 @@ function applyRender(focusAfter = null) {
   const { nodes, edges, zones, zoneMembers } = lastGraphData;
   let visNodes = nodes;
   let visEdges = edges;
-  if (libvirtShutOffHidden || libvirtUpHidden) {
-    const hiddenIds = new Set(visNodes.filter(n =>
-      (libvirtShutOffHidden && n._libvirtOff) || (libvirtUpHidden && n._libvirtUp)
-    ).map(n => n.id));
+  const guestHide = n => n._kind && guestHidden[`${n._kind}-${n._state}`];
+  if (visNodes.some(guestHide)) {
+    const hiddenIds = new Set(visNodes.filter(guestHide).map(n => n.id));
     visNodes = visNodes.filter(n => !hiddenIds.has(n.id));
-    visEdges = visEdges.filter(e => !hiddenIds.has(e.to));
+    visEdges = visEdges.filter(e => !hiddenIds.has(e.to) && !hiddenIds.has(e.from));
   }
   if (!zonesVisible)   visEdges = visEdges.filter(e => !e._zoneEdge);
   if (!tunnelsVisible) visEdges = visEdges.map(e => {
@@ -3263,15 +3309,17 @@ const REFRESH_LS_KEY  = 'promlens_refresh';
 
 function applyLayoutData(data) {
   if (!data || !Object.keys(data).length) return false;
-  const { __zonesVisible, __tunnelsVisible, __blackboxUpHidden, __blackboxSshUpHidden, __legendVisible, __libvirtShutOffHidden, __libvirtUpHidden, ...positions } = data;
+  // __libvirt* are legacy keys (<= 0.15.0), destructured only to keep them out of positions
+  const { __zonesVisible, __tunnelsVisible, __blackboxUpHidden, __blackboxSshUpHidden, __legendVisible, __libvirtShutOffHidden, __libvirtUpHidden, __guestHidden, ...positions } = data;
   if (__legendVisible          !== undefined) legendVisible          = __legendVisible;
   if (Object.keys(positions).length)         savedPositions         = positions;
   if (__zonesVisible           !== undefined) zonesVisible           = __zonesVisible;
   if (__tunnelsVisible         !== undefined) tunnelsVisible         = __tunnelsVisible;
   if (__blackboxUpHidden       !== undefined) blackboxUpHidden       = __blackboxUpHidden;
   if (__blackboxSshUpHidden    !== undefined) blackboxSshUpHidden    = __blackboxSshUpHidden;
-  if (__libvirtShutOffHidden   !== undefined) libvirtShutOffHidden   = __libvirtShutOffHidden;
-  if (__libvirtUpHidden        !== undefined) libvirtUpHidden        = __libvirtUpHidden;
+  if (__guestHidden) Object.keys(guestHidden).forEach(k => {
+    if (__guestHidden[k] !== undefined) guestHidden[k] = __guestHidden[k];
+  });
   return true;
 }
 
@@ -3299,8 +3347,7 @@ async function saveLayout() {
       __blackboxUpHidden: blackboxUpHidden,
       __blackboxSshUpHidden: blackboxSshUpHidden,
       __legendVisible: legendVisible,
-      __libvirtShutOffHidden: libvirtShutOffHidden,
-      __libvirtUpHidden: libvirtUpHidden,
+      __guestHidden: guestHidden,
     };
     localStorage.setItem(LAYOUT_LS_KEY, JSON.stringify(payload));
     const r = await fetch('/api/layout', {
@@ -3545,8 +3592,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (key === 'icmp')    return !blackboxUpHidden;
     if (key === 'ssh')     return !blackboxSshUpHidden;
     if (key === 'legend')     return legendVisible;
-    if (key === 'libvirt-off') return !libvirtShutOffHidden;
-    if (key === 'libvirt-up')  return !libvirtUpHidden;
+    if (key in guestHidden)   return !guestHidden[key];
     return true;
   }
 
@@ -3559,7 +3605,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     $('fsTunnelBtn').classList.toggle('active', tunnelsVisible);
     $('fsBbBtn').classList.toggle('active', !blackboxUpHidden);
     $('fsBbSshBtn').classList.toggle('active', !blackboxSshUpHidden);
-    const anyOff = !zonesVisible || !tunnelsVisible || blackboxUpHidden || blackboxSshUpHidden || !legendVisible || libvirtShutOffHidden || libvirtUpHidden;
+    const anyOff = !zonesVisible || !tunnelsVisible || blackboxUpHidden || blackboxSshUpHidden || !legendVisible
+                || Object.values(guestHidden).some(Boolean);
     $('viewsHiddenDot').classList.toggle('show', anyOff);
     $('netLegend').style.display = legendVisible ? '' : 'none';
   }
@@ -3570,8 +3617,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (key === 'icmp')    blackboxUpHidden     = !blackboxUpHidden;
     if (key === 'ssh')     blackboxSshUpHidden  = !blackboxSshUpHidden;
     if (key === 'legend')      legendVisible        = !legendVisible;
-    if (key === 'libvirt-off') libvirtShutOffHidden = !libvirtShutOffHidden;
-    if (key === 'libvirt-up')  libvirtUpHidden      = !libvirtUpHidden;
+    if (key in guestHidden)    guestHidden[key]     = !guestHidden[key];
     syncViewsDropdown();
     if (key !== 'legend') applyRender();
   }
