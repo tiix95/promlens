@@ -1,0 +1,34 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        if ! getent group promlens > /dev/null 2>&1; then
+            addgroup --system promlens
+        fi
+        if ! getent passwd promlens > /dev/null 2>&1; then
+            adduser --system --ingroup promlens \
+                --home /var/lib/promlens \
+                --shell /usr/sbin/nologin \
+                --gecos "ProMLens service account" \
+                --no-create-home \
+                promlens
+        fi
+        mkdir -p /var/lib/promlens
+        chown promlens:promlens /var/lib/promlens
+        chmod 0750 /var/lib/promlens
+
+        mkdir -p /etc/promlens
+        chown root:promlens /etc/promlens
+        chmod 0750 /etc/promlens
+        for f in /etc/promlens/*.yaml; do
+            [ -f "$f" ] || continue
+            chown root:promlens "$f"
+            chmod 0640 "$f"
+        done
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

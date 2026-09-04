@@ -1,0 +1,112 @@
+# Prometheus connection configuration
+#
+# SECURITY: this file may contain credentials (username/password/token).
+# Restrict permissions after creation:
+#   chown root:promlens /etc/promlens/promlens.yaml
+#   chmod 0640 /etc/promlens/promlens.yaml
+url: https://prometheus.example.com/prometheus
+
+# Authentication type: none | basic | bearer | cert
+# cert : the client certificate is handled by the browser (mTLS).
+#        All PromQL queries go straight from the browser to Prometheus.
+#        Prometheus must allow CORS (--web.cors.origin).
+#        The username/password/token fields are ignored in cert mode.
+auth:
+  type: none
+  # username: ""
+  # password: ""
+  # token: ""
+
+# Advanced options
+# instance_label: instance   # Prometheus label used as the node identifier (default: instance)
+# direct_credentials: true   # send credentials (mTLS cert) on direct browser -> Prometheus queries (cert mode only, default: false)
+
+# Frigate NVR exporter (optional)
+# Adds one node per camera (frigate_camera_fps). fps=0 -> red, fps>0 -> green.
+# Remove this section (or set enabled: false) to disable it.
+frigate:
+  enabled: true          # set to false to disable without removing the section
+  camera_url: https://frigate.example.com/  # clicking a camera opens camera_url/#camera_name
+
+# Libvirt exporter (optional)
+# Shows the state of the VMs in the hypervisor tooltip.
+# Remove this section (or set enabled: false) to disable it.
+libvirt:
+  instance_label: instance  # label identifying the hypervisor (default: global instance_label)
+  # metric: libvirt_domain_info_state  # PromQL metric to query (default: libvirt_domain_info_state)
+  # enabled: false          # set to false to disable without removing the section
+
+# Blackbox exporter (optional)
+# Remove this section (or set enabled: false) to disable it.
+blackbox:
+  destination_label: dest   # label identifying the probe target node (default: instance)
+  source_label: job         # label identifying the source node; if absent or unresolved -> prometheus
+  # enabled: false          # set to false to disable without removing the section
+  # http_node_label: upstream  # label identifying the node for http/https_2xx probes (default: upstream)
+  # dest_aliases:           # unresolvable destination aliases -> target node
+  #   host1:
+  #     - alias-1
+  #     - alias-2
+  #     - alias-3
+# ssl_verify: false  # WARNING: disables TLS certificate verification -- MITM risk, do not use in production
+ssl_verify: true
+timeout: 5
+proxy:
+
+# Webhook notifications (optional)
+# Sends a notification when a ProMLens alert appears (firing) or clears
+# (resolved). These alerts are computed by ProMLens itself from the
+# node_exporter metrics, no Prometheus alerting rule is required:
+#   NodeDown           : up{exporter="node"} != 1
+#   CpuHigh / MemoryHigh / DiskHigh / NetworkHigh : the "red" threshold of the
+#                        thresholds section is reached (thresholds_by_node overrides included)
+#   SystemdUnitFailed  : a systemd unit has failed
+# The Prometheus alerts shown on the "Alerts" page are a separate stream,
+# they never trigger a notification.
+# Remove this section (or set enabled: false) to disable it.
+# webhooks:
+#   enabled: true
+#   interval: 60             # poll interval in seconds (default: 60, minimum: 10)
+#   for_cycles: 2            # consecutive cycles before notifying (default: 2, minimum: 1)
+#   notify_resolved: true    # also notify when an alert clears (default: true)
+#   link: https://promlens.example.com/   # value of the payload "url" field
+#   severities: [critical]                # only notify these severities (default: all)
+#   disabled:                # alerts never notified (glob style patterns on alertname)
+#     - SystemdUnitFailed
+#     - "*High"
+#   timeout: 10              # HTTP timeout of the webhook POSTs (default: 10)
+#   # ssl_verify: false      # WARNING: disables TLS verification of the webhooks
+#   # ca_file: /etc/promlens/webhook-ca.crt   # specific CA to verify the webhooks
+#   # proxy: http://proxy:3128
+#   targets:
+#     - url: https://notify.example.com/api/notify
+#       topic: infra
+#       recipients: [ops, oncall]
+#       module: promlens
+#       # link: https://promlens.example.com/   # overrides the payload "url"
+#       headers:
+#         Authorization: "Bearer ${NOTIFY_TOKEN}"   # $VAR / ${VAR} are expanded
+
+# Color thresholds (optional)
+# The "red" level also triggers the webhook notifications (see above).
+# Defaults: orange=0.70, red=0.90 for all metrics.
+# Metrics: cpu, mem, disk, network. Both orange and red must be in [0.0, 1.0] and orange < red.
+# thresholds:
+#   cpu:     { orange: 0.70, red: 0.90 }
+#   mem:     { orange: 0.70, red: 0.90 }
+#   disk:    { orange: 0.70, red: 0.90 }
+#   network: { orange: 0.70, red: 0.90 }
+
+# Per-node threshold overrides (optional)
+# Key = topology ID (the 'id' field in topology.yaml).
+# Only listed metrics are overridden; others fall back to generic thresholds.
+# thresholds_by_node:
+#   hv01:
+#     cpu:  { orange: 0.85, red: 0.95 }
+#   db01:
+#     disk: { orange: 0.80, red: 0.95 }
+
+# Disable threshold-based colors for nodes and edges (optional, default: true).
+# When false: nodes use their neutral type color (or #c9d1e8 for pure Prometheus nodes),
+# edges show only up/down state. Probe failure and node-down colors remain active.
+# threshold_colors: false

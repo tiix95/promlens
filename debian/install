@@ -1,0 +1,5 @@
+src/main.py usr/lib/promlens/
+src/prometheus_query.py usr/lib/promlens/
+src/auth.py usr/lib/promlens/
+src/notifier.py usr/lib/promlens/
+src/local_alerts.py usr/lib/promlens/

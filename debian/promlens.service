@@ -1,0 +1,27 @@
+[Unit]
+Description=ProMLens - Prometheus visualization web application
+After=network.target
+
+[Service]
+Type=simple
+User=promlens
+Group=promlens
+EnvironmentFile=/etc/default/promlens
+WorkingDirectory=/usr/lib/promlens
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host ${BIND_HOST} --port ${BIND_PORT}
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadWritePaths=/var/lib/promlens
+ReadOnlyPaths=/etc/promlens
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

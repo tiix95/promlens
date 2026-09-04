@@ -1,0 +1,20 @@
+vis-network 9.1.9
+https://visjs.github.io/vis-network/
+
+Copyright (c) 2011-2017 Almende B.V, http://almende.com
+Copyright (c) 2017-2019 visjs contributors, https://github.com/visjs
+
+vis.js is dual licensed under both
+
+  1. The Apache 2.0 License
+     http://www.apache.org/licenses/LICENSE-2.0
+
+  and
+
+  2. The MIT License
+     http://opensource.org/licenses/MIT
+
+vis.js may be distributed under either license.
+
+The full license header is also preserved at the top of the bundled
+vis-network.min.js file in this directory.

@@ -1,0 +1,29 @@
+Source: promlens
+Section: web
+Priority: optional
+Maintainer: tiix <contact@tiix.wtf>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/tiix/promlens
+Vcs-Git: https://github.com/tiix/promlens.git
+Vcs-Browser: https://github.com/tiix/promlens
+
+Package: promlens
+Architecture: all
+Depends: ${misc:Depends},
+ python3,
+ python3-aiohttp,
+ python3-fastapi,
+ python3-uvicorn,
+ python3-yaml,
+ python3-pydantic,
+ python3-uvloop,
+ python3-websockets,
+ python3-httptools,
+ python3-passlib,
+ python3-bcrypt,
+ python3-itsdangerous
+Description: ProMLens - Prometheus visualization web application
+ A web application for visualizing and querying Prometheus metrics.
+ Provides an HTTP API to execute PromQL queries (instant and range)
+ and a static frontend with network topology visualization.

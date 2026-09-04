@@ -1,0 +1,6 @@
+BIND_HOST=127.0.0.1
+BIND_PORT=8001
+CONFIG_FILE=/etc/promlens/promlens.yaml
+TOPOLOGY_FILE=/etc/promlens/topology.yaml
+LAYOUT_FILE=/var/lib/promlens/layout.json
+SESSION_SECURE_COOKIE=1

@@ -1,0 +1,12 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+override_dh_install:
+	dh_install
+	cp -r src/static debian/promlens/usr/lib/promlens/
+	install -D -m 0644 debian/promlens.default debian/promlens/etc/default/promlens
+	install -D -m 0644 debian/promlens.nginx debian/promlens/usr/share/promlens/nginx/routes.conf
+	install -d -m 0755 debian/promlens/etc/promlens
+	cp examples/data/* debian/promlens/etc/promlens/
+	install -d -m 0750 debian/promlens/var/lib/promlens

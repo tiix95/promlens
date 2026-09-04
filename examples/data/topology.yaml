@@ -1,0 +1,158 @@
+# ProMLens -- network topology
+# Every node declared here is rendered even without a matching Prometheus metric.
+# node_exporter instances are attached to their gateway by CIDR matching.
+#
+# Available types: cloud, router, firewall, switch, vm, lxc, kube, zigbee, wifi
+#
+# children      : alternative to parent -- declares child nodes directly under their parent.
+# inherit_zone  : set to false so a node does not inherit its parent zone (default: true).
+#   Nodes listed in children inherit from their parent automatically (unless parent is explicit).
+#   children can themselves have children (recursive).
+#
+# Zones: logical grouping driven by the Prometheus `zone` label.
+# Instances whose zone= label matches a declared zone connect to the zone node,
+# which is itself connected to its parent.
+#
+# Cameras (Frigate): overrides the parent of a camera.
+# By default the parent is read from the `parent` label of the frigate_camera_fps metric.
+# Use this section to force a specific parent.
+#
+cameras:
+  - name: cam-lobby
+    parent: sw-cam
+  - name: cam-entrance
+    parent: sw-cam
+  - name: cam-parking
+    parent: sw-cam
+  - name: cam-yard
+    parent: sw-cam
+  - name: cam-corridor
+    parent: sw-cam
+
+nodes:
+  - id: isp-cloud
+    label: isp-cloud
+    type: cloud
+
+  - id: isp-backup
+    label: isp-backup
+    type: cloud
+    parent: rtr-edge
+    interface: eth-backup
+
+  - id: rtr-edge
+    label: rtr-edge
+    type: router
+    parent: isp-cloud
+    interface: wan0
+
+  - id: fw-dmz
+    label: fw-dmz
+    type: firewall
+    parent: rtr-edge
+    interface: eth-dmz
+
+  - id: sw-core
+    label: Core Switch
+    type: switch
+    parent: rtr-edge
+    interface: eth-servers
+
+  - id: sw-cam
+    label: Camera Switch
+    type: switch
+    parent: rtr-edge
+    interface: eth-cameras
+
+  - id: zigbee-coord
+    label: Zigbee coordinator
+    type: zigbee
+    parent: rtr-edge
+    interface: eth-zigbee
+
+  - id: wifi-ap
+    label: Wifi AP
+    type: wifi
+    parent: rtr-edge
+    interface: eth-wifi
+
+
+# Prometheus hosts whose IP falls inside one of these CIDRs
+# are automatically connected to the gateway of that network.
+networks: []
+
+# Logical zones: match the `zone` label in Prometheus.
+# parent         : visual anchor of the bubble (topology id or another zone).
+# default_parent : parent of the Prometheus nodes of this zone in the graph.
+#                  Useful when the visual anchor differs from the attachment node.
+#                  If absent, nodes attach to the topology node resolved from parent.
+# members        : optional list of nodes manually added to the bubble
+#                  (topology id or Prometheus hostname -- on top of the zone= label).
+zones:
+  - id: zone-lan
+    label: zone-lan
+    parent: sw-core
+
+  - id: zone-cloud
+    label: zone-cloud
+    parent: isp-cloud
+
+  - id: zone-vm
+    parent: zone-lan
+
+# Links with an explicit interface: filters the tooltip of Prometheus links
+# so only the declared interface(s) are shown (instead of every interface).
+# from/to       : topology id or Prometheus hostname.
+# interface     : interface on the `from` node (string or list of strings).
+# interface_to  : interface on the `to` node (optional, defaults to interface, string or list).
+#
+# Example with a single interface:
+# links:
+#   - from: rtr-edge
+#     to: srv01
+#     interface: eth0
+#
+# Example with several interfaces:
+# links:
+#   - from: rtr-edge
+#     to: srv01
+#     interface:
+#       - eth0
+#       - eth1
+links:
+  - from: hv01
+    to:
+      - app01
+      - app02
+      - app03
+      - app04
+      - db01
+    interface: vm-prod0
+  - from: hv02
+    to:
+      - git
+      - prometheus
+      - grafana
+      - web01
+    interface: vm-prod0
+# WireGuard tunnels: dashed link between two nodes.
+# from/to : id of a topology node or a Prometheus hostname.
+# interface     : WireGuard interface on the `from` node (used for the metrics).
+# interface_to  : WireGuard interface on the `to` node (optional, defaults to interface).
+#
+# Example:
+# tunnels:
+#   - from: rtr-edge
+#     to: peer-host
+#     interface: wg0
+#     interface_to: wg0    # optional
+tunnels:
+  - from: rtr-edge
+    to:
+      - srv01
+      - srv02
+      - vps01
+      - vps02
+      - vps03
+    interface: wg0
+    parent_interface: wan0

@@ -1,0 +1,8 @@
+# Debian package: python3-aiohttp
+aiohttp>=3.9.0
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pyyaml>=6.0
+# Debian packages: python3-passlib python3-bcrypt python3-itsdangerous
+passlib[apache,bcrypt]>=1.7.4
+itsdangerous>=2.1.0

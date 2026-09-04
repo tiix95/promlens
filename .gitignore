@@ -1,0 +1,20 @@
+venv/
+__pycache__/
+*.pyc
+.claude*
+
+# Container image archives produced by `make export`
+*.tar
+
+# Debian build artifacts
+debian/changelog
+debian/.debhelper/
+debian/promlens/
+debian/debhelper-build-stamp
+debian/files
+*.deb
+*.buildinfo
+*.changes
+debian/promlens.debhelper.log
+debian/promlens.postrm.debhelper
+debian/promlens.substvars

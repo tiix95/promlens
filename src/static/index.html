@@ -1,0 +1,3674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProMLens</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link href="/fonts/fonts.css" rel="stylesheet">
+  <script src="/js/vis-network.min.js"></script>
+  <style>
+    :root {
+      --bg0:#060810;--bg1:#0b0e17;--bg2:#111520;--bg3:#181d2e;
+      --border:#1e2540;--border-hi:#2a3354;
+      --text0:#dde4f0;--text1:#7e8aaa;--text2:#3d4560;
+      --accent:#00cfff;--accent-dim:rgba(0,207,255,.1);--accent-border:rgba(0,207,255,.28);
+      --accent-glow:0 0 18px rgba(0,207,255,.22);
+      --ok:#2dba6e;--ok-dim:rgba(45,186,110,.12);--ok-border:rgba(45,186,110,.32);
+      --err:#f04f4f;--err-dim:rgba(240,79,79,.12);--err-border:rgba(240,79,79,.32);
+      --warn:#e0972a;
+      --hdr:50px;--radius:6px;
+      --mono:'JetBrains Mono',monospace;--sans:'Syne',sans-serif;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:var(--bg0);color:var(--text0);font-family:var(--sans);font-size:14px;overflow:hidden}
+    body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,rgba(0,207,255,.055) 1px,transparent 1px);background-size:28px 28px;pointer-events:none;z-index:0}
+
+    .app{display:flex;height:100vh;position:relative;z-index:1;flex-direction:column}
+
+    /* -- CONTROLS -- */
+    .icon-btn{background:none;border:1px solid var(--border);color:var(--text1);width:28px;height:28px;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;transition:border-color .15s,color .15s,background .15s}
+    .icon-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+    .icon-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+    .status-pill{display:flex;align-items:center;gap:6px;padding:5px 9px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--mono);font-size:10px;color:var(--text1);overflow:hidden;max-width:180px}
+    .s-dot{width:5px;height:5px;border-radius:50%;background:var(--text2);flex-shrink:0}
+    .s-dot.online{background:var(--ok);box-shadow:0 0 5px var(--ok);animation:blink 2.5s ease infinite}
+    .s-dot.error{background:var(--err)}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+    .status-txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .text-btn{background:none;border:1px solid var(--border);color:var(--text1);padding:5px 10px;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;border-radius:var(--radius);cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s}
+    .text-btn:hover{border-color:var(--accent-border);color:var(--accent)}
+    .prom-url{font-family:var(--mono);font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+
+    /* -- MAIN -- */
+    .main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+    .main-hdr{height:var(--hdr);padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+    .hdr-sep{width:1px;height:20px;background:var(--border);flex-shrink:0}
+    .hdr-title{position:absolute;left:50%;transform:translateX(-50%);font-size:15px;font-weight:800;letter-spacing:.06em;color:var(--text0);pointer-events:none;white-space:nowrap}
+    .hdr-title .hi{color:var(--accent)}
+    .map-controls{display:flex;align-items:center;gap:8px}
+    .q-time{font-family:var(--mono);font-size:10px;color:var(--text2)}
+    .search-wrap{position:relative;display:flex;align-items:center}
+    .search-input{background:var(--bg2);border:1px solid var(--border);color:var(--text1);padding:4px 8px 4px 22px;font-family:var(--mono);font-size:10px;border-radius:var(--radius);outline:none;width:120px;transition:border-color .2s,width .2s,color .15s}
+    .search-input:focus{border-color:var(--accent-border);width:180px;color:var(--text0)}
+    .search-input::placeholder{color:var(--text2)}
+    .search-icon{position:absolute;left:6px;color:var(--text2);font-size:11px;pointer-events:none}
+    .ctrl-select{background:var(--bg2);border:1px solid var(--border);color:var(--text1);padding:5px 8px;font-family:var(--mono);font-size:10px;border-radius:var(--radius);outline:none;cursor:pointer;transition:border-color .15s}
+    .ctrl-select:hover{border-color:var(--border-hi)}
+    .main-body{flex:1;overflow:hidden;padding:16px 20px;display:flex;flex-direction:column;gap:14px}
+
+    /* -- ERROR -- */
+    .error-banner{display:none;align-items:flex-start;gap:10px;flex-shrink:0;padding:11px 14px;background:var(--err-dim);border:1px solid var(--err-border);border-radius:var(--radius);color:#f07070;font-family:var(--mono);font-size:12px;line-height:1.5}
+    .error-banner.show{display:flex}
+
+    /* -- STATS -- */
+    .stats-bar{display:none;gap:10px;align-items:stretch;flex-shrink:0}
+    .stats-bar.show{display:flex}
+    .stat{display:flex;align-items:baseline;gap:6px;padding:8px 16px;background:var(--bg1);border:1px solid var(--border);border-radius:var(--radius)}
+    .stat-num{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1;color:var(--text0)}
+    .stat-lbl{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.15em;color:var(--text2)}
+    .stat.up-stat{border-color:var(--ok-border);background:var(--ok-dim)}.stat.up-stat .stat-num{color:var(--ok)}
+    .stat.down-stat{border-color:var(--err-border);background:var(--err-dim)}.stat.down-stat .stat-num{color:var(--err)}
+
+    /* -- NETWORK CANVAS -- */
+    #netWrap{flex:1;min-height:0;position:relative;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--bg1);background-image:radial-gradient(circle,rgba(0,207,255,.04) 1px,transparent 1px);background-size:24px 24px}
+    #netContainer{width:100%;height:100%}
+
+    .vis-tooltip{background:#181d2e!important;border:1px solid #2a3354!important;border-radius:6px!important;color:#dde4f0!important;font-family:'JetBrains Mono',monospace!important;font-size:11px!important;line-height:1.75!important;padding:9px 13px!important;box-shadow:0 10px 30px rgba(0,0,0,.6)!important;max-width:300px!important;pointer-events:none!important}
+
+    .net-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--text2);font-family:var(--mono);font-size:11px;text-align:center;pointer-events:none}
+    .net-overlay.hidden{display:none}
+    .overlay-icon{font-size:48px;opacity:.18;line-height:1}
+    .spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .legend{position:absolute;bottom:14px;right:14px;display:flex;flex-direction:column;gap:6px;background:rgba(11,14,23,.88);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;backdrop-filter:blur(4px)}
+    .legend-row{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;color:var(--text1)}
+    /* -- FULLSCREEN -- */
+    #fsBar{display:none;position:absolute;bottom:24px;left:50%;transform:translateX(-50%);align-items:center;gap:6px;background:rgba(11,14,23,.9);border:1px solid var(--border-hi);border-radius:var(--radius);padding:6px 10px;backdrop-filter:blur(10px);z-index:20;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+    #fsBar .fs-sep{width:1px;height:16px;background:var(--border);flex-shrink:0}
+    #netWrap:fullscreen{border:none;border-radius:0}
+    #netWrap:fullscreen #fsBar{display:flex}
+    #netWrap:fullscreen #fsBar.visible{opacity:1;pointer-events:auto}
+    #netWrap:fullscreen .legend{display:none}
+    #netWrap:fullscreen .vis-tooltip{display:none!important}
+    .l-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .l-line{width:18px;height:2px;border-radius:1px;flex-shrink:0}
+    .l-dashed{width:18px;height:0;border-top:2px dashed;flex-shrink:0}
+    .panel-stack{position:absolute;top:10px;right:10px;z-index:10;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+    .prom-alert-panel{background:var(--bg2);border:1px solid #f04f4f;border-radius:var(--radius);font-family:var(--mono);font-size:11px;min-width:160px;max-width:340px;pointer-events:auto}
+    .prom-alert-panel.orange{border-color:#e0972a}
+    .prom-alert-panel.blue{border-color:#4a8adf}
+    .prom-alert-panel-hdr{display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;color:#f04f4f;user-select:none}
+    .prom-alert-panel.orange .prom-alert-panel-hdr{color:#e0972a}
+    .prom-alert-panel.blue .prom-alert-panel-hdr{color:#4a8adf}
+    .prom-alert-badge{background:#f04f4f;color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700}
+    .prom-alert-panel.orange .prom-alert-badge{background:#e0972a;color:#111}
+    .prom-alert-panel.blue .prom-alert-badge{background:#4a8adf;color:#fff}
+    .prom-alert-list{display:none;padding:4px 10px 8px;border-top:1px solid var(--border);max-height:240px;overflow-y:auto}
+    .prom-alert-list.open{display:block}
+    .prom-alert-item{padding:3px 0;border-bottom:1px solid var(--border);word-break:break-all}
+    .prom-alert-item:last-child{border-bottom:none}
+    .prom-alert-name{font-weight:700}
+    .prom-alert-summary{color:var(--text2);font-size:10px;margin-top:1px}
+    .alert-panel{background:var(--bg2);border:1px solid #f04f4f;border-radius:var(--radius);font-family:var(--mono);font-size:11px;min-width:140px;max-width:320px;pointer-events:auto}
+    .alert-panel.orange{border-color:#e0972a}
+    .alert-panel-hdr{display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;color:#f04f4f;user-select:none}
+    .alert-panel.orange .alert-panel-hdr{color:#e0972a}
+    .alert-badge{background:#f04f4f;color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700}
+    .alert-panel.orange .alert-badge{background:#e0972a;color:#111}
+    .alert-list{display:none;padding:4px 10px 8px;border-top:1px solid var(--border);max-height:220px;overflow-y:auto}
+    .alert-list.open{display:block}
+    .alert-item{color:var(--text1);padding:2px 0;word-break:break-all}
+    .warn-panel{background:var(--bg2);border:1px solid var(--warn);border-radius:var(--radius);font-family:var(--mono);font-size:11px;min-width:140px;max-width:320px;pointer-events:auto}
+    .warn-panel-hdr{display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;color:var(--warn);user-select:none}
+    .warn-badge{background:var(--warn);color:#111;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700}
+    .warn-list{display:none;padding:4px 10px 8px;border-top:1px solid var(--border);max-height:200px;overflow-y:auto}
+    .warn-list.open{display:block}
+    .warn-item{color:var(--text1);padding:2px 0;word-break:break-all}
+    .links-panel{background:var(--bg2);border:1px solid var(--accent-border);border-radius:var(--radius);font-family:var(--mono);font-size:11px;min-width:160px;max-width:320px;pointer-events:auto}
+    .links-panel-hdr{display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;color:var(--accent);user-select:none}
+    .links-badge{background:var(--accent);color:#111;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700}
+    .links-list{display:none;padding:4px 10px 8px;border-top:1px solid var(--border);max-height:220px;overflow-y:auto}
+    .links-list.open{display:block}
+    .links-item{color:var(--text1);padding:2px 0;display:flex;align-items:center;gap:4px;font-size:10px}
+    .links-item-sep{color:var(--text2);flex-shrink:0}
+    .links-item-tag{font-size:9px;flex-shrink:0}
+    .orphan-panel{background:var(--bg2);border:1px solid rgba(155,109,255,.35);border-radius:var(--radius);font-family:var(--mono);font-size:11px;min-width:140px;max-width:320px;pointer-events:auto}
+    .orphan-panel-hdr{display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;color:#9b6dff;user-select:none}
+    .orphan-badge{background:#9b6dff;color:#111;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700}
+    .orphan-list{display:none;padding:4px 10px 8px;border-top:1px solid var(--border);max-height:200px;overflow-y:auto}
+    .orphan-list.open{display:block}
+    .orphan-item{color:var(--text1);padding:2px 0;word-break:break-all;cursor:pointer;transition:color .1s}
+    .orphan-item:hover{color:var(--text0)}
+
+    /* -- VIEWS DROPDOWN -- */
+    .views-wrap{position:relative}
+    #viewsPanel{position:absolute;top:calc(100% + 8px);right:0;background:var(--bg2);border:1px solid var(--border-hi);border-radius:var(--radius);padding:5px 0;min-width:210px;z-index:200;display:none;box-shadow:0 10px 28px rgba(0,0,0,.6);backdrop-filter:blur(8px)}
+    #viewsPanel.open{display:block}
+    .views-item{display:flex;align-items:center;gap:9px;padding:8px 14px;cursor:pointer;user-select:none;transition:background .1s}
+    .views-item:hover{background:var(--bg3)}
+    .views-icon{width:16px;text-align:center;font-size:13px;flex-shrink:0;color:var(--text1)}
+    .views-label{flex:1;font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--text1)}
+    .views-check{width:16px;height:16px;border:1px solid var(--border-hi);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:10px;color:transparent;flex-shrink:0;transition:all .15s}
+    .views-item.on .views-check{border-color:var(--accent);background:var(--accent-dim);color:var(--accent)}
+    .views-item.on .views-label{color:var(--text0)}
+    .views-sep{height:1px;background:var(--border);margin:4px 0}
+    .views-btn-wrap{display:flex;align-items:center;gap:5px}
+    #viewsHiddenDot{width:6px;height:6px;border-radius:50%;background:var(--warn);display:none;flex-shrink:0}
+    #viewsHiddenDot.show{display:block}
+    .user-badge{display:none;align-items:center;gap:6px}
+    .user-badge.show{display:flex}
+    .user-name{font-family:var(--mono);font-size:10px;color:var(--text1);white-space:nowrap}
+
+    /* -- NODE TIP MODAL -- */
+    #nodeTipModal{border:none;border-radius:var(--radius);background:var(--bg2);color:var(--text1);padding:0;width:480px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.85);outline:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0}
+    #nodeTipModal::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
+    .ntm-hdr{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
+    .ntm-title{flex:1;font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .ntm-close{background:none;border:none;color:var(--text2);font-size:16px;line-height:1;padding:2px 6px;cursor:pointer;transition:color .15s;flex-shrink:0}
+    .ntm-close:hover{color:var(--text0)}
+    .ntm-body{padding:14px 16px;font-family:var(--mono);font-size:11px;line-height:1.75;max-height:60vh;overflow-y:auto}
+    .ntm-body br{display:block;margin:0}
+
+    /* -- ALERTS PAGE -- */
+    #alertsPage{display:none;flex-direction:column;height:100vh;position:relative;z-index:1}
+    .ap-hdr{height:var(--hdr);padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0}
+    .ap-title{font-size:15px;font-weight:800;letter-spacing:.06em;color:var(--text0)}
+    .ap-subtitle{font-family:var(--mono);font-size:10px;color:var(--text2)}
+    .ap-body{flex:1;overflow-y:auto;padding:20px}
+    .ap-empty{font-family:var(--mono);font-size:12px;color:var(--text2);text-align:center;padding:60px 0}
+    .ap-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden}
+    .ap-card.critical{border-color:var(--err-border)}
+    .ap-card.warning{border-color:rgba(224,151,42,.35)}
+    .ap-card.info{border-color:rgba(74,138,223,.35)}
+    .ap-card-hdr{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none}
+    .ap-card-hdr:hover{background:var(--bg2)}
+    .ap-sev-badge{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;padding:2px 7px;border-radius:10px;flex-shrink:0}
+    .ap-sev-badge.critical{background:var(--err-dim);color:#f04f4f;border:1px solid var(--err-border)}
+    .ap-sev-badge.warning{background:rgba(224,151,42,.12);color:#e0972a;border:1px solid rgba(224,151,42,.32)}
+    .ap-sev-badge.info{background:rgba(74,138,223,.12);color:#4a8adf;border:1px solid rgba(74,138,223,.32)}
+    .ap-card-name{font-family:var(--mono);font-size:12px;font-weight:700;flex:1;color:var(--text0)}
+    .ap-card-inst{font-family:var(--mono);font-size:10px;color:var(--text0);background:var(--bg3);border:1px solid var(--border-hi);border-radius:3px;padding:2px 8px;flex-shrink:0}
+    .ap-card-body{display:none;padding:0 14px 12px;border-top:1px solid var(--border)}
+    .ap-card-body.open{display:block}
+    .ap-summary{font-family:var(--mono);font-size:11px;color:var(--text1);padding:8px 0 6px;line-height:1.6}
+    .ap-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+    .ap-label{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:2px 6px}
+    .ap-label-key{color:var(--text2)}
+    .ap-label-val{color:var(--text1)}
+    .ap-hint{font-family:var(--mono);font-size:9px;color:var(--text2);text-align:right;margin-top:12px}
+    .ap-count{font-family:var(--mono);font-size:9px;font-weight:700;padding:1px 7px;border-radius:10px;background:var(--bg3);color:var(--text1);border:1px solid var(--border-hi);flex-shrink:0}
+    .ap-tag{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text0)}
+    .ap-alert-row{padding:5px 0;border-top:1px solid var(--border);display:flex;align-items:flex-start;gap:8px}
+    .ap-alert-row:first-child{border-top:none;padding-top:0}
+    .ap-alert-row-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text0)}
+    .ap-alert-row-sum{font-family:var(--mono);font-size:10px;color:var(--text2);margin-top:2px;line-height:1.5}
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <div class="main">
+    <header class="main-hdr">
+      <div class="status-pill"><span id="sDot" class="s-dot"></span><span id="sTxt" class="status-txt">not connected</span></div>
+      <span id="promUrlLbl" class="prom-url"></span>
+      <button id="reloadBtn" class="text-btn" title="Reload configuration files">RELOAD</button>
+      <button id="testBtn" class="text-btn">TEST</button>
+      <div class="hdr-sep"></div>
+      <div class="hdr-title">PROM<span class="hi">LENS</span></div>
+      <div style="flex:1"></div>
+      <div class="map-controls">
+        <div class="search-wrap">
+          <span class="search-icon">⊙</span>
+          <input id="searchInput" class="search-input" type="text" placeholder="search…" autocomplete="off" spellcheck="false">
+        </div>
+        <span id="lastUpdate" class="q-time"></span>
+        <select id="refreshSel" class="ctrl-select" title="Auto-refresh">
+          <option value="10">10s</option>
+          <option value="30" selected>30s</option>
+          <option value="60">1m</option>
+          <option value="300">5m</option>
+          <option value="0">off</option>
+        </select>
+        <button id="refreshBtn"     class="icon-btn"        title="Refresh"              style="font-size:16px">↻</button>
+        <button id="fitBtn"         class="icon-btn"        title="Fit view"             style="font-size:13px">⊡</button>
+        <button id="resetBtn"       class="icon-btn"        title="Reset layout"         style="font-size:13px">⌖</button>
+        <button id="saveLayoutBtn"    class="icon-btn"        title="Save layout"          style="font-size:13px">⊞</button>
+        <button id="selectModeBtn"    class="icon-btn"        title="Selection mode"        style="font-size:13px">⬚</button>
+        <button id="fullscreenBtn"    class="icon-btn"        title="Fullscreen"           style="font-size:13px">⛶</button>
+        <div class="views-wrap">
+          <button id="viewsBtn" class="text-btn views-btn-wrap" title="Views">◈ VIEWS <span id="viewsHiddenDot"></span></button>
+          <div id="viewsPanel">
+            <div class="views-item on" data-key="zones">
+              <span class="views-icon">◎</span>
+              <span class="views-label">ZONES</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-item on" data-key="tunnels">
+              <span class="views-icon">⤯</span>
+              <span class="views-label">TUNNELS</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-sep"></div>
+            <div class="views-item" data-key="icmp">
+              <span class="views-icon">⊙</span>
+              <span class="views-label">PROBE ICMP UP</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-item" data-key="ssh">
+              <span class="views-icon">⌨</span>
+              <span class="views-label">PROBE SSH UP</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-sep"></div>
+            <div class="views-item on" data-key="libvirt-up">
+              <span class="views-icon">▶</span>
+              <span class="views-label">VM UP NO NODE</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-item on" data-key="libvirt-off">
+              <span class="views-icon">□</span>
+              <span class="views-label">VM SHUT OFF</span>
+              <span class="views-check">✓</span>
+            </div>
+            <div class="views-sep"></div>
+            <div class="views-item on" data-key="legend">
+              <span class="views-icon">▤</span>
+              <span class="views-label">LEGEND</span>
+              <span class="views-check">✓</span>
+            </div>
+          </div>
+        </div>
+        <div class="hdr-sep" id="authSep" style="display:none"></div>
+        <div id="userBadge" class="user-badge">
+          <span id="userBadgeName" class="user-name"></span>
+          <button id="logoutBtn" class="text-btn">EXIT</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="main-body">
+      <div id="errBanner" class="error-banner"><span>⚠&nbsp;</span><span id="errMsg"></span></div>
+
+      <div id="statsBar" class="stats-bar">
+        <div class="stat"><span id="totalCount" class="stat-num">0</span><span class="stat-lbl">TOTAL</span></div>
+        <div class="stat up-stat"><span id="upCount" class="stat-num">0</span><span class="stat-lbl">UP</span></div>
+        <div class="stat down-stat"><span id="downCount" class="stat-num">0</span><span class="stat-lbl">DOWN</span></div>
+      </div>
+
+      <div id="netWrap">
+        <div id="netContainer"></div>
+        <canvas id="alertDotCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none"></canvas>
+        <div class="panel-stack">
+          <div id="promAlertPanel" class="prom-alert-panel" style="display:none">
+            <div class="prom-alert-panel-hdr" onclick="$('promAlertList').classList.toggle('open')" ondblclick="event.stopPropagation();openAlertsPage()">
+              <span>▲</span><span id="promAlertCount" class="prom-alert-badge">0</span><span>Prometheus Alerts</span>
+            </div>
+            <div id="promAlertList" class="prom-alert-list"></div>
+          </div>
+          <div id="alertPanel" class="alert-panel" style="display:none">
+            <div class="alert-panel-hdr" onclick="$('alertList').classList.toggle('open')">
+              <span>●</span><span id="alertCount" class="alert-badge">0</span><span>Alerts</span>
+            </div>
+            <div id="alertList" class="alert-list"></div>
+          </div>
+          <div id="warnPanel" class="warn-panel" style="display:none">
+            <div class="warn-panel-hdr" onclick="$('warnList').classList.toggle('open')">
+              <span>⚠</span><span id="warnCount" class="warn-badge">0</span><span>Warnings</span>
+            </div>
+            <div id="warnList" class="warn-list"></div>
+          </div>
+          <div id="linksPanel" class="links-panel" style="display:none">
+            <div class="links-panel-hdr" onclick="$('linksList').classList.toggle('open')">
+              <span>⬡</span><span id="linksCount" class="links-badge">0</span><span>Links</span>
+            </div>
+            <div id="linksList" class="links-list"></div>
+          </div>
+          <div id="orphanPanel" class="orphan-panel" style="display:none">
+            <div class="orphan-panel-hdr" onclick="$('orphanList').classList.toggle('open')">
+              <span>◌</span><span id="orphanCount" class="orphan-badge">0</span><span>Orphans</span>
+            </div>
+            <div id="orphanList" class="orphan-list"></div>
+          </div>
+        </div>
+        <div id="fsBar">
+          <button onclick="toggleFullscreen()" class="icon-btn" title="Exit fullscreen" style="font-size:13px">⛶</button>
+          <span class="fs-sep"></span>
+          <button id="fsFitBtn"          class="icon-btn" title="Fit view"        style="font-size:13px">⊡</button>
+          <button id="fsRefreshBtn"      class="icon-btn" title="Refresh"     style="font-size:16px">↻</button>
+          <button id="fsSelectModeBtn"   class="icon-btn" title="Selection mode" style="font-size:13px">⬚</button>
+          <span class="fs-sep"></span>
+          <button id="fsZoneBtn"   class="icon-btn active" title="Zones"   style="font-size:12px">◎</button>
+          <button id="fsTunnelBtn" class="icon-btn active" title="Tunnels" style="font-size:12px">⤯</button>
+          <button id="fsBbBtn"     class="icon-btn"        title="ICMP UP" style="font-size:12px">⊙</button>
+          <button id="fsBbSshBtn"  class="icon-btn"        title="SSH UP"  style="font-size:11px">⌨</button>
+        </div>
+        <div id="netOverlay" class="net-overlay">
+          <div class="overlay-icon">◈</div>
+          <div>Connecting to Prometheus...</div>
+        </div>
+        <div id="netLegend" class="legend">
+          <div class="legend-row"><span class="l-dot" style="background:#7e8aaa"></span>Cloud</div>
+          <div class="legend-row"><span class="l-dot" style="background:#00cfff;box-shadow:0 0 4px #00cfff"></span>Router</div>
+          <div class="legend-row"><span class="l-dot" style="background:#e0972a"></span>Firewall</div>
+          <div class="legend-row"><span class="l-dot" style="background:#4a8adf"></span>Switch</div>
+          <div class="legend-row"><span class="l-dot" style="background:#9b6dff"></span>Zone</div>
+          <div class="legend-row"><span class="l-dot" style="background:#c084fc"></span>VM</div>
+          <div class="legend-row"><span class="l-dot" style="background:#34d399"></span>LXC</div>
+          <div class="legend-row"><span class="l-dot" style="background:#818cf8"></span>Pod Kube</div>
+          <div class="legend-row"><span class="l-dot" style="background:#2dba6e;box-shadow:0 0 4px rgba(45,186,110,.7)"></span>Server UP</div>
+          <div class="legend-row"><span class="l-dot" style="background:#f04f4f"></span>Server DOWN</div>
+          <div class="legend-row"><span class="l-line" style="background:#2a3354"></span>Topology link</div>
+          <div class="legend-row"><span class="l-dashed" style="border-color:#f04f4f;opacity:.7"></span>Link DOWN</div>
+          <div class="legend-row"><span class="l-line" style="background:#2dba6e;opacity:.8"></span>Probe ICMP UP</div>
+          <div class="legend-row"><span class="l-line" style="background:#f04f4f"></span>Probe ICMP DOWN</div>
+          <div class="legend-row"><span class="l-line" style="background:#2dba6e;opacity:.8"></span>Probe SSH UP</div>
+          <div class="legend-row"><span class="l-line" style="background:#f04f4f"></span>Probe SSH DOWN</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="alertsPage">
+    <header class="ap-hdr">
+      <button id="apBackBtn" class="icon-btn" title="Back to map" style="font-size:15px">←</button>
+      <div class="hdr-sep"></div>
+      <span class="ap-title">PROMETHEUS <span style="color:var(--accent)">ALERTS</span></span>
+      <span id="apSubtitle" class="ap-subtitle"></span>
+    </header>
+    <div class="ap-body" id="apBody">
+      <div class="ap-empty">No active alert</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// -- CONFIG ---------------------------------------------------
+let promUrl           = '';
+let authType          = 'none';
+let appAuthMode       = 'none';
+let instanceLabel     = 'instance';
+let directCredentials = false;
+let bbDestLabel    = 'instance';
+let bbSrcLabel     = null;
+let bbDestAliases  = {}; // alias -> node name (from the dest_aliases config)
+const $ = id => document.getElementById(id);
+
+let thresholdColors = true;
+let thresholds = {
+  cpu:     { orange: 0.70, red: 0.90 },
+  mem:     { orange: 0.70, red: 0.90 },
+  disk:    { orange: 0.70, red: 0.90 },
+  network: { orange: 0.70, red: 0.90 },
+};
+let thresholdsByNode = {};
+
+function getThr(nodeId, metric, level) {
+  const m = thresholds[metric] ? metric : 'cpu';
+  return thresholdsByNode[nodeId]?.[m]?.[level] ?? thresholds[m][level];
+}
+
+function setStatus(s, msg) {
+  $('sDot').className = 's-dot'+(s==='ok' ? ' online' : s==='err' ? ' error' : '');
+  $('sTxt').textContent = msg;
+}
+function showErr(m) { $('errMsg').textContent=m; $('errBanner').classList.add('show'); }
+function hideErr()   { $('errBanner').classList.remove('show'); }
+
+// -- ICONS ----------------------------------------------------
+function toUrl(svg) { return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg); }
+const BG = '#0b0e17';
+
+const ICON = {
+  cloud: (c='#7e8aaa') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="68" height="52" viewBox="0 0 68 52">
+      <path d="M18 44 C9 44,3 37,7 30 C5 22,13 15,22 18 C24 9,33 4,43 8 C50 4,58 10,56 19 C63 21,67 29,63 36 C61 43,54 47,47 47 L21 47 C19 47,17 46,18 44Z" fill="${BG}" stroke="${c}" stroke-width="1.8" stroke-linejoin="round"/>
+      <line x1="26" y1="47" x2="26" y2="52" stroke="${c}" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2 3"/>
+      <line x1="34" y1="47" x2="34" y2="52" stroke="${c}" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2 3"/>
+      <line x1="42" y1="47" x2="42" y2="52" stroke="${c}" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2 3"/>
+    </svg>`),
+
+  router: (c='#00cfff') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60">
+      <circle cx="30" cy="30" r="27" fill="${BG}" stroke="${c}" stroke-width="1.8"/>
+      <circle cx="30" cy="30" r="5" fill="${c}"/>
+      <polygon points="30,8 34,16 26,16" fill="${c}"/>
+      <polygon points="30,52 34,44 26,44" fill="${c}"/>
+      <polygon points="8,30 16,26 16,34" fill="${c}"/>
+      <polygon points="52,30 44,26 44,34" fill="${c}"/>
+      <line x1="30" y1="16" x2="30" y2="25" stroke="${c}" stroke-width="1.5"/>
+      <line x1="30" y1="35" x2="30" y2="44" stroke="${c}" stroke-width="1.5"/>
+      <line x1="16" y1="30" x2="25" y2="30" stroke="${c}" stroke-width="1.5"/>
+      <line x1="35" y1="30" x2="44" y2="30" stroke="${c}" stroke-width="1.5"/>
+    </svg>`),
+
+  firewall: (c='#e0972a') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+      <rect x="5" y="5" width="46" height="46" rx="5" fill="${BG}" stroke="${c}" stroke-width="1.8"/>
+      <path d="M19 44 C19 35,25 29,21 19 C28 24,32 32,28 38 C33 31,32 22,39 17 C37 29,42 36,38 44" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`),
+
+  switch: (c='#4a8adf') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="38" viewBox="0 0 64 38">
+      <rect x="4" y="7" width="56" height="24" rx="4" fill="${BG}" stroke="${c}" stroke-width="1.8"/>
+      <rect x="11" y="13" width="5" height="8" rx="1.5" fill="${c}" opacity=".75"/>
+      <rect x="20" y="13" width="5" height="8" rx="1.5" fill="${c}" opacity=".75"/>
+      <rect x="29" y="13" width="5" height="8" rx="1.5" fill="${c}" opacity=".75"/>
+      <rect x="38" y="13" width="5" height="8" rx="1.5" fill="${c}" opacity=".75"/>
+      <rect x="47" y="13" width="5" height="8" rx="1.5" fill="${c}" opacity=".75"/>
+      <circle cx="58" cy="27" r="2.5" fill="${c}"/>
+    </svg>`),
+
+  zone: (c='#9b6dff') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+      <rect x="4" y="4" width="48" height="48" rx="10" fill="${BG}" stroke="${c}" stroke-width="1.8" stroke-dasharray="5 2"/>
+      <circle cx="28" cy="23" r="9" fill="none" stroke="${c}" stroke-width="1.5"/>
+      <circle cx="28" cy="23" r="3" fill="${c}"/>
+      <line x1="28" y1="32" x2="28" y2="42" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="20" y1="42" x2="36" y2="42" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>`),
+
+  wifi: (c='#4fc3f7') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+      <rect x="4" y="4" width="48" height="48" rx="10" fill="${BG}" stroke="${c}" stroke-width="1.8"/>
+      <circle cx="28" cy="42" r="3.2" fill="${c}"/>
+      <path d="M21 36 Q28 29 35 36" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M14 29 Q28 18 42 29" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M7  22 Q28  7 49 22" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>`),
+
+  zigbee: (c='#00bcd4') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+      <polygon points="28,3 51,15.5 51,40.5 28,53 5,40.5 5,15.5" fill="${BG}" stroke="${c}" stroke-width="1.8"/>
+      <line x1="17" y1="17" x2="39" y2="17" stroke="${c}" stroke-width="3"   stroke-linecap="round"/>
+      <line x1="39" y1="17" x2="17" y2="39" stroke="${c}" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="17" y1="39" x2="39" y2="39" stroke="${c}" stroke-width="3"   stroke-linecap="round"/>
+    </svg>`),
+
+  vm: (c='#c084fc') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="52" height="48" viewBox="0 0 52 48">
+      <rect x="3" y="4" width="46" height="32" rx="3" fill="${BG}" stroke="${c}" stroke-width="1.6" stroke-dasharray="4 2"/>
+      <rect x="9" y="11" width="34" height="7" rx="1.5" fill="none" stroke="${c}" stroke-width="1.3"/>
+      <circle cx="39" cy="14.5" r="1.8" fill="${c}"/>
+      <line x1="12" y1="14.5" x2="33" y2="14.5" stroke="${c}" stroke-width="1.2" stroke-linecap="round"/>
+      <rect x="9" y="22" width="34" height="7" rx="1.5" fill="none" stroke="${c}" stroke-width="1.3"/>
+      <circle cx="39" cy="25.5" r="1.8" fill="${c}"/>
+      <line x1="12" y1="25.5" x2="27" y2="25.5" stroke="${c}" stroke-width="1.2" stroke-linecap="round"/>
+      <line x1="26" y1="36" x2="26" y2="43" stroke="${c}" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="18" y1="43" x2="34" y2="43" stroke="${c}" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>`),
+
+  lxc: (c='#34d399') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="52" height="48" viewBox="0 0 52 48">
+      <rect x="3" y="4" width="46" height="36" rx="3" fill="${BG}" stroke="${c}" stroke-width="1.6"/>
+      <rect x="8" y="9" width="36" height="26" rx="2" fill="none" stroke="${c}" stroke-width="0.9" stroke-dasharray="3 2"/>
+      <path d="M13 22 L20 26 L13 30" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <line x1="23" y1="26" x2="36" y2="26" stroke="${c}" stroke-width="1.8" stroke-linecap="round"/>
+      <rect x="37" y="23" width="3" height="6" rx="0.5" fill="${c}" opacity=".7"/>
+    </svg>`),
+
+  kube: (c='#818cf8') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+      <polygon points="28,4 49,16 49,40 28,52 7,40 7,16" fill="${BG}" stroke="${c}" stroke-width="1.8"/>
+      <circle cx="20" cy="24" r="6" fill="none" stroke="${c}" stroke-width="1.4"/>
+      <circle cx="36" cy="24" r="6" fill="none" stroke="${c}" stroke-width="1.4"/>
+      <circle cx="28" cy="37" r="6" fill="none" stroke="${c}" stroke-width="1.4"/>
+      <circle cx="20" cy="24" r="2" fill="${c}"/>
+      <circle cx="36" cy="24" r="2" fill="${c}"/>
+      <circle cx="28" cy="37" r="2" fill="${c}"/>
+    </svg>`),
+
+  server: (c='#2dba6e') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+      <rect x="4" y="9"  width="40" height="12" rx="2.5" fill="${BG}" stroke="${c}" stroke-width="1.6"/>
+      <rect x="4" y="27" width="40" height="12" rx="2.5" fill="${BG}" stroke="${c}" stroke-width="1.6"/>
+      <circle cx="38" cy="15" r="2.2" fill="${c}"/>
+      <circle cx="38" cy="33" r="2.2" fill="${c}"/>
+      <line x1="9"  y1="13" x2="28" y2="13" stroke="${c}" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="9"  y1="17" x2="22" y2="17" stroke="${c}" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="9"  y1="31" x2="28" y2="31" stroke="${c}" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="9"  y1="35" x2="22" y2="35" stroke="${c}" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>`),
+
+  prometheus: (c='#00cfff') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+      <circle cx="28" cy="28" r="25" fill="${BG}" stroke="${c}" stroke-width="1.8"/>
+      <circle cx="28" cy="28" r="15" fill="none" stroke="${c}" stroke-width="1.0" stroke-dasharray="3 2"/>
+      <circle cx="28" cy="28" r="7" fill="none" stroke="${c}" stroke-width="1.4"/>
+      <circle cx="28" cy="28" r="2.5" fill="${c}"/>
+      <line x1="3" y1="28" x2="21" y2="28" stroke="${c}" stroke-width="1.4"/>
+      <line x1="35" y1="28" x2="53" y2="28" stroke="${c}" stroke-width="1.4"/>
+      <line x1="28" y1="3" x2="28" y2="21" stroke="${c}" stroke-width="1.4"/>
+      <line x1="28" y1="35" x2="28" y2="53" stroke="${c}" stroke-width="1.4"/>
+    </svg>`),
+
+  camera: (c='#2dba6e') => toUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="48" viewBox="0 0 60 48">
+      <path d="M20 11 L23 4 L37 4 L40 11Z" fill="${BG}" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/>
+      <rect x="4" y="11" width="52" height="33" rx="5" fill="${BG}" stroke="${c}" stroke-width="1.8"/>
+      <circle cx="28" cy="27" r="11" fill="none" stroke="${c}" stroke-width="1.8"/>
+      <circle cx="28" cy="27" r="6" fill="none" stroke="${c}" stroke-width="1.2" opacity=".5"/>
+      <circle cx="28" cy="27" r="3" fill="${c}"/>
+      <circle cx="49" cy="18" r="3.5" fill="${c}" opacity=".55"/>
+    </svg>`),
+};
+
+// -- CIDR MATCHING --------------------------------------------
+function ipToInt(ip) {
+  const p = ip.split('.');
+  if (p.length !== 4) return null;
+  return p.reduce((a, o) => (a * 256) + parseInt(o, 10), 0) >>> 0;
+}
+
+function ipInCidr(ip, cidr) {
+  try {
+    const [base, bits] = cidr.split('/');
+    const len  = parseInt(bits, 10);
+    const mask = len === 0 ? 0 : (~0 << (32 - len)) >>> 0;
+    return (ipToInt(ip) & mask) === (ipToInt(base) & mask);
+  } catch { return false; }
+}
+
+function extractIp(instance) {
+  const c = instance.lastIndexOf(':');
+  return c > 0 ? instance.slice(0, c) : instance;
+}
+
+// -- TOOLTIP --------------------------------------------------
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function tipEl(html) {
+  const d = document.createElement('div');
+  d.style.whiteSpace = 'nowrap';
+  d.innerHTML = html;
+  return d;
+}
+
+// -- GRAPH BUILDER --------------------------------------------
+const TYPE_CFG = {
+  cloud:    { iconFn: 'cloud',    color: '#7e8aaa', size: 36 },
+  router:   { iconFn: 'router',   color: '#00cfff', size: 30 },
+  vm:       { iconFn: 'vm',       color: '#c084fc', size: 22 },
+  lxc:      { iconFn: 'lxc',     color: '#34d399', size: 22 },
+  kube:     { iconFn: 'kube',    color: '#818cf8', size: 24 },
+  firewall: { iconFn: 'firewall', color: '#e0972a', size: 27 },
+  switch:   { iconFn: 'switch',   color: '#4a8adf', size: 24 },
+  zigbee:   { iconFn: 'zigbee',   color: '#00bcd4', size: 26 },
+  wifi:     { iconFn: 'wifi',     color: '#4fc3f7', size: 26 },
+  zone:     { iconFn: 'zone',     color: '#9b6dff', size: 24 },
+};
+
+function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFailed = {}, instLabel = 'instance', blackboxData = null, blackboxSshData = null, libvirtData = null, libvirtInstLabel = 'instance', frigateData = null, frigateConfig = null, tcpData = null, httpData = null, httpNodeLabel = 'upstream', thrColors = true) {
+  const DEFAULT_CAP = 1e9;
+
+  // -- Libvirt index : hypervisor -> [{ domain, domainname, state_desc, value }]
+  const libvirtByHost = {};
+  if (libvirtData?.instances) {
+    libvirtData.instances.forEach(inst => {
+      const raw  = inst.labels[libvirtInstLabel] || '';
+      const last = raw.lastIndexOf(':');
+      const host = last > 0 ? raw.slice(0, last) : raw;
+      const key  = host || raw;
+      if (!key) return;
+      const vm = {
+        domain:     inst.labels.domain     || '',
+        domainname: inst.labels.domainname || '',
+        state_desc: inst.labels.state_desc || '',
+        value:      parseFloat(inst.value),
+      };
+      [raw, host].filter(Boolean).forEach(k => {
+        if (!libvirtByHost[k]) libvirtByHost[k] = [];
+        if (!libvirtByHost[k].some(v => v.domain === vm.domain)) libvirtByHost[k].push(vm);
+      });
+    });
+  }
+
+  function libvirtVmTip(instance, host) {
+    const vms = libvirtByHost[instance] || libvirtByHost[host] || [];
+    if (!vms.length) return null;
+    const sorted = [...vms].sort((a, b) => a.domain.localeCompare(b.domain));
+    const rows = sorted.map(vm => {
+      const v = vm.value;
+      const c = v === 1 ? '#2dba6e' : (v === 3 || v === 7) ? '#e0972a' : (v === 5 || v === 6) ? '#f04f4f' : '#7e8aaa';
+      const icon = v === 1 ? '▶' : v === 3 ? '⏸' : v === 5 ? '□' : v === 6 ? '✖' : v === 7 ? '⏾' : '◌';
+      const name = esc(vm.domain || vm.domainname);
+      const desc = vm.state_desc ? `<span style="color:#3d4560"> ${esc(vm.state_desc)}</span>` : '';
+      return `&nbsp;&nbsp;<span style="color:${c}">${icon}&nbsp;${name}${desc}</span>`;
+    });
+    return `<span style="color:#7e8aaa">VMs (${vms.length}):</span><br>${rows.join('<br>')}`;
+  }
+
+  // -- TCP connect index : host -> [{ service, port, tool, probeSuccess }]
+  const tcpByHost = {};
+  const tcpRawKeys = new Set();
+  if (tcpData?.instances) {
+    tcpData.instances.forEach(inst => {
+      const raw  = inst.labels[instLabel] || '';
+      const last = raw.lastIndexOf(':');
+      const host = last > 0 ? raw.slice(0, last) : raw;
+      if (raw) tcpRawKeys.add(raw);
+      const probe = {
+        service:      inst.labels.service  || inst.labels.upstream || raw,
+        port:         inst.labels.port     || '',
+        tool:         inst.labels.tool     || '',
+        probeSuccess: parseFloat(inst.value) === 1,
+      };
+      [raw, host].filter(Boolean).forEach(k => {
+        if (!tcpByHost[k]) tcpByHost[k] = [];
+        if (!tcpByHost[k].some(p => p.service === probe.service && p.port === probe.port))
+          tcpByHost[k].push(probe);
+      });
+    });
+  }
+
+  function tcpFailing(instance, host) {
+    return (tcpByHost[instance] || tcpByHost[host] || []).some(p => !p.probeSuccess);
+  }
+
+  function tcpTip(instance, host) {
+    const probes = tcpByHost[instance] || tcpByHost[host] || [];
+    if (!probes.length) return null;
+    const rows = probes.map(p => {
+      const c    = p.probeSuccess ? '#2dba6e' : '#f04f4f';
+      const icon = p.probeSuccess ? '✓' : '✗';
+      const port = p.port ? `<span style="color:#3d4560">:${esc(p.port)}</span>` : '';
+      const tool = p.tool ? `<span style="color:#3d4560"> ${esc(p.tool)}</span>` : '';
+      return `&nbsp;&nbsp;<span style="color:${c}">${icon}&nbsp;${esc(p.service)}</span>${port}${tool}`;
+    });
+    return `<span style="color:#7e8aaa">TCP:</span><br>${rows.join('<br>')}`;
+  }
+
+  // -- HTTP probe index : host -> [{ target, probeSuccess }]
+  const httpByHost = {};
+  const httpRawKeys = new Set();
+  if (httpData?.instances) {
+    httpData.instances.forEach(inst => {
+      const raw  = inst.labels[httpNodeLabel] || '';
+      const last = raw.lastIndexOf(':');
+      const host = last > 0 ? raw.slice(0, last) : raw;
+      if (raw) httpRawKeys.add(raw);
+      const probe = {
+        target:       inst.labels[instLabel] || inst.labels.instance || raw,
+        probeSuccess: parseFloat(inst.value) === 1,
+      };
+      [raw, host].filter(Boolean).forEach(k => {
+        if (!httpByHost[k]) httpByHost[k] = [];
+        if (!httpByHost[k].some(p => p.target === probe.target)) httpByHost[k].push(probe);
+      });
+    });
+  }
+
+  function httpFailing(instance, host) {
+    return (httpByHost[instance] || httpByHost[host] || []).some(p => !p.probeSuccess);
+  }
+
+  function httpTip(instance, host) {
+    const probes = httpByHost[instance] || httpByHost[host] || [];
+    if (!probes.length) return null;
+    const rows = probes.map(p => {
+      const c    = p.probeSuccess ? '#2dba6e' : '#f04f4f';
+      const icon = p.probeSuccess ? '✓' : '✗';
+      const target = esc(p.target.replace(/^https?:\/\//, ''));
+      return `&nbsp;&nbsp;<span style="color:${c}">${icon}&nbsp;${target}</span>`;
+    });
+    return `<span style="color:#7e8aaa">HTTP:</span><br>${rows.join('<br>')}`;
+  }
+
+  // -- ICMP/SSH probe index : host -> [{ module, probeSuccess, src }]
+  const bbDestByHost = {};
+  const bbSrcByHost  = {}; // src -> [{ module, probeSuccess, destHost }] -- only when source_label configured
+  const bbDestRawKeys = new Set();
+  [...(blackboxData?.instances || []), ...(blackboxSshData?.instances || [])].forEach(inst => {
+    const raw  = inst.labels[bbDestLabel] || '';
+    const last = raw.lastIndexOf(':');
+    const host = last > 0 ? raw.slice(0, last) : raw;
+    if (raw) bbDestRawKeys.add(raw);
+    const srcRaw  = bbSrcLabel ? (inst.labels[bbSrcLabel] || '') : '';
+    const srcHost = srcRaw ? (srcRaw.lastIndexOf(':') > 0 ? srcRaw.slice(0, srcRaw.lastIndexOf(':')) : srcRaw) : '';
+    const probe = {
+      module:       inst.labels.module || '',
+      probeSuccess: parseFloat(inst.value) === 1,
+      src:          srcRaw || 'prometheus',
+    };
+    [raw, host].filter(Boolean).forEach(k => {
+      if (!bbDestByHost[k]) bbDestByHost[k] = [];
+      if (!bbDestByHost[k].some(p => p.module === probe.module && p.src === probe.src))
+        bbDestByHost[k].push(probe);
+    });
+    // Index by source so outgoing probes can be shown in the source node's tooltip
+    if (srcRaw) {
+      const outProbe = { module: probe.module, probeSuccess: probe.probeSuccess, destHost: host || raw };
+      [srcRaw, srcHost].filter(Boolean).forEach(k => {
+        if (!bbSrcByHost[k]) bbSrcByHost[k] = [];
+        if (!bbSrcByHost[k].some(p => p.module === outProbe.module && p.destHost === outProbe.destHost))
+          bbSrcByHost[k].push(outProbe);
+      });
+    }
+  });
+
+  function findBbProbes(instance, host) {
+    if (bbDestByHost[instance]?.length) return bbDestByHost[instance];
+    if (bbDestByHost[host]?.length)     return bbDestByHost[host];
+    for (const [k, probes] of Object.entries(bbDestByHost)) {
+      const kh = k.lastIndexOf(':') > 0 ? k.slice(0, k.lastIndexOf(':')) : k;
+      // Exact alias: dest "l1" -> bbDestAliases["l1"] = "server2" -> matches host "server2"
+      const aliasTarget = bbDestAliases[kh];
+      if (aliasTarget && (aliasTarget === host || instance.startsWith(aliasTarget + ':'))) return probes;
+      // Suffix fuzzy: key "l1-server" ends with host "server"
+      if (kh.length > host.length && kh.endsWith(host) && '-_.'.includes(kh[kh.length - host.length - 1]))
+        return probes;
+      // Prefix fuzzy: key "server.dc1" starts with host "server" (topo id shorter than probe FQDN)
+      if (kh.length > host.length && kh.startsWith(host) && '-_.'.includes(kh[host.length]))
+        return probes;
+      // Alias-prefix strip + prefix fuzzy: key "l1-server" -> alias "l1" -> remainder "server"
+      // -> host "server-l1" starts with "server"
+      for (const alias of Object.keys(bbDestAliases)) {
+        if (kh.length > alias.length && kh.startsWith(alias) && '-_.'.includes(kh[alias.length])) {
+          const rem = kh.slice(alias.length + 1);
+          if (rem === host || instance.startsWith(rem + ':') ||
+              (host.length > rem.length && host.startsWith(rem) && '-_.'.includes(host[rem.length])))
+            return probes;
+        }
+      }
+    }
+    return [];
+  }
+
+  // Probes FROM this node (it is the source, not the destination)
+  function findBbOutgoingProbes(instance, host) {
+    if (!bbSrcLabel) return [];
+    if (bbSrcByHost[instance]?.length) return bbSrcByHost[instance];
+    if (bbSrcByHost[host]?.length)     return bbSrcByHost[host];
+    for (const [k, probes] of Object.entries(bbSrcByHost)) {
+      const kh = k.lastIndexOf(':') > 0 ? k.slice(0, k.lastIndexOf(':')) : k;
+      if (kh.length > 0 && host.startsWith(kh) && '-_.'.includes(host[kh.length])) return probes;
+      if (kh.length > 0 && kh.startsWith(host) && '-_.'.includes(kh[host.length])) return probes;
+    }
+    return [];
+  }
+
+  function bbProbeFailing(instance, host) {
+    // With source_label: probe status shown on the source node
+    if (bbSrcLabel) return findBbOutgoingProbes(instance, host).some(p => !p.probeSuccess);
+    // Without source_label: probe status shown on the destination node (legacy)
+    return findBbProbes(instance, host).some(p => !p.probeSuccess);
+  }
+
+  function bbProbeTip(instance, host) {
+    if (bbSrcLabel) {
+      // When source_label is configured, each probe appears in the SOURCE node's tooltip only.
+      const outgoing = findBbOutgoingProbes(instance, host);
+      if (!outgoing.length) return null;
+      const self = esc((host || instance).replace(/:\d+$/, ''));
+      const rows = outgoing.map(p => {
+        const c     = p.probeSuccess ? '#2dba6e' : '#f04f4f';
+        const icon  = p.probeSuccess ? '✓' : '✗';
+        const label = p.module === 'ssh_banner' ? 'SSH' : 'ICMP';
+        const dest = esc((p.destHost || '').replace(/:\d+$/, ''));
+        return `&nbsp;&nbsp;<span style="color:${c}">${icon} ${label} ${self} → ${dest}</span>`;
+      });
+      return `<span style="color:#7e8aaa">Probe:</span><br>${rows.join('<br>')}`;
+    }
+    // Without source_label: show incoming probes in the destination node's tooltip.
+    const probes = findBbProbes(instance, host);
+    if (!probes.length) return null;
+    const dest = esc((host || instance).replace(/:\d+$/, ''));
+    const rows = probes.map(p => {
+      const c     = p.probeSuccess ? '#2dba6e' : '#f04f4f';
+      const icon  = p.probeSuccess ? '✓' : '✗';
+      const label = p.module === 'ssh_banner' ? 'SSH' : 'ICMP';
+      const src   = esc((p.src || 'prometheus').replace(/:\d+$/, ''));
+      return `&nbsp;&nbsp;<span style="color:${c}">${icon} ${label} ${src} → ${dest}</span>`;
+    });
+    return `<span style="color:#7e8aaa">Probe:</span><br>${rows.join('<br>')}`;
+  }
+
+  const nodes = [];
+  const edges = [];
+  const blinkNodes = new Set();
+  const warnings = [];
+  const issues   = []; // { label, severity: 'red'|'orange', reason }
+
+  const topoNodes = topo.nodes || [];
+  const networks  = topo.networks || [];
+  const instances = promData.instances || [];
+
+  // -- Phase 1 : index Prometheus instance hostname -> srvId --
+  // Build first to detect collisions with topology.yaml
+  const promHostToSrvId = {};
+  instances.forEach(inst => {
+    const instance = inst.labels[instLabel] || '';
+    const lastCol  = instance.lastIndexOf(':');
+    const host     = lastCol > 0 ? instance.slice(0, lastCol) : instance;
+    const srvId    = `__srv__${instance}`;
+    promHostToSrvId[host]     = srvId;
+    promHostToSrvId[instance] = srvId;
+  });
+
+  // Topology node IDs that match a Prometheus host (merged)
+  const mergedTopoIds        = new Set(topoNodes.map(n => n.id).filter(id => promHostToSrvId[id]));
+  // topology node id -> Prometheus instance string (e.g. 'rtr-edge' -> 'rtr-edge:9100')
+  const mergedTopoToInstance = Object.fromEntries(
+    [...mergedTopoIds].map(id => [id, promHostToSrvId[id].slice(7)])
+  );
+
+  // -- Blackbox pre-scan: cross interfaces to exclude from normal tooltips --
+  // Computed before Phase 2 (uses promHostToSrvId, already available).
+  // Principle: a host2->host1 probe implies a "host2" iface on host1 (and "host1" on host2).
+  const bbPreExclude = {}; // instance -> Set<ifaceName>
+  {
+    const tryResolveInst = (name) => {
+      if (!name) return null;
+      const host = name.lastIndexOf(':') > 0 ? name.slice(0, name.lastIndexOf(':')) : name;
+      // Exact match topology
+      const topoN = topoNodes.find(n =>
+        n.id === name || n.id === host || (n.label ?? n.id) === name || (n.label ?? n.id) === host);
+      if (topoN) return mergedTopoToInstance[topoN.id] ?? null;
+      // Alias blackbox
+      const aliasTarget = bbDestAliases[name] || bbDestAliases[host];
+      if (aliasTarget) {
+        const aN = topoNodes.find(n => n.id === aliasTarget || (n.label ?? n.id) === aliasTarget);
+        if (aN) return mergedTopoToInstance[aN.id] ?? null;
+        if (promHostToSrvId[aliasTarget]) return aliasTarget;
+      }
+      // Exact match Prometheus
+      if (promHostToSrvId[name]) return name;
+      if (promHostToSrvId[host]) return host;
+      // Alias-prefix strip: "l1-server" -> alias "l1" -> target "server" -> resolve "server-l1"
+      // Must come before prefix-fuzzy Prometheus to avoid "l1-server" -> Prometheus host "l1" (= server2)
+      for (const alias of Object.keys(bbDestAliases)) {
+        if (host.length > alias.length && host.startsWith(alias) && '-_.'.includes(host[alias.length])) {
+          const target = host.slice(alias.length + 1);
+          const tN = topoNodes.find(n => n.id === target || (n.label ?? n.id) === target);
+          if (tN) return mergedTopoToInstance[tN.id] ?? null;
+          if (promHostToSrvId[target]) return target;
+          const tFuzzyN = topoNodes.find(n => {
+            const id = n.id, lbl = n.label ?? n.id;
+            return (id.startsWith(target)  && '-_.'.includes(id[target.length]))
+                || (lbl.startsWith(target) && '-_.'.includes(lbl[target.length]));
+          });
+          if (tFuzzyN) return mergedTopoToInstance[tFuzzyN.id] ?? null;
+          const tFuzzyProm = Object.keys(promHostToSrvId).find(k =>
+            k.startsWith(target) && '-_.'.includes(k[target.length]));
+          if (tFuzzyProm) return tFuzzyProm;
+        }
+      }
+      // Prefix fuzzy: "server-l1" -> node "server" if separated by - _ .
+      const fuzzyTopoN = topoNodes.find(n => {
+        const id = n.id, lbl = n.label ?? n.id;
+        return (host.startsWith(id)  && '-_.'.includes(host[id.length]))
+            || (host.startsWith(lbl) && '-_.'.includes(host[lbl.length]));
+      });
+      if (fuzzyTopoN) return mergedTopoToInstance[fuzzyTopoN.id] ?? null;
+      const fuzzyProm = Object.keys(promHostToSrvId).find(k =>
+        host.startsWith(k) && '-_.'.includes(host[k.length]));
+      if (fuzzyProm) return fuzzyProm;
+      // Suffix fuzzy match: "l1-server" resolves to node "server"
+      const sfxTopoN = topoNodes.find(n => {
+        const id = n.id, lbl = n.label ?? n.id;
+        return (host.length > id.length  && host.endsWith(id)  && '-_.'.includes(host[host.length - id.length - 1]))
+            || (host.length > lbl.length && host.endsWith(lbl) && '-_.'.includes(host[host.length - lbl.length - 1]));
+      });
+      if (sfxTopoN) return mergedTopoToInstance[sfxTopoN.id] ?? null;
+      const sfxProm = Object.keys(promHostToSrvId).find(k =>
+        host.length > k.length && host.endsWith(k) && '-_.'.includes(host[host.length - k.length - 1]));
+      return sfxProm ?? null;
+    };
+    const ifaceMatches = (iface, prefix) =>
+      iface === prefix || (iface.startsWith(prefix) && '-_.'.includes(iface[prefix.length]));
+    const addPreEx = (hostLabel, ifacePrefix) => {
+      const inst = tryResolveInst(hostLabel);
+      if (!inst || !ifacePrefix) return;
+      if (!bbPreExclude[inst]) bbPreExclude[inst] = new Set();
+      // Fuzzy resolution: store the real interface names that match
+      let found = false;
+      Object.keys(netMetrics[inst] || {}).forEach(iface => {
+        if (ifaceMatches(iface, ifacePrefix)) { bbPreExclude[inst].add(iface); found = true; }
+      });
+      if (!found) bbPreExclude[inst].add(ifacePrefix); // exact fallback if not in netMetrics yet
+    };
+    const seenPairs = new Set();
+    [...(blackboxData?.instances || []), ...(blackboxSshData?.instances || [])].forEach(bi => {
+      const destRaw = bi.labels[bbDestLabel] || '';
+      const srcRaw  = bbSrcLabel ? (bi.labels[bbSrcLabel] || '') : '';
+      if (!destRaw || !srcRaw) return;
+      const destHost = destRaw.lastIndexOf(':') > 0 ? destRaw.slice(0, destRaw.lastIndexOf(':')) : destRaw;
+      const srcHost  = srcRaw.lastIndexOf(':') > 0  ? srcRaw.slice(0, srcRaw.lastIndexOf(':'))  : srcRaw;
+      const pairKey  = `${srcHost}|${destHost}`;
+      if (seenPairs.has(pairKey)) return;
+      seenPairs.add(pairKey);
+      addPreEx(destRaw, srcHost); // iface "host2" on host1 -> exclude from host1
+      addPreEx(srcRaw,  destHost); // iface "host1" on host2 -> exclude from host2
+    });
+  }
+
+  // -- Phase 2 : topology nodes -------------------------------
+  // Topology nodes are always created, even when they match a Prometheus host,
+  // so that other nodes can reference them as a parent.
+  const promParentOverride = {}; // kept for backward compatibility (zones, etc.)
+
+  topoNodes.forEach(n => {
+    const label = n.label ?? n.id;
+    const tc = TYPE_CFG[n.type] || TYPE_CFG.switch;
+    // ICMP/SSH probe status (may be overwritten by Phase 5 for merged nodes)
+    const topoKeys  = [n.id, n.label, n.ip].filter(Boolean);
+    const topoProbeFailing = topoKeys.some(k => bbProbeFailing(k, k));
+    const topoProbeTipStr  = topoKeys.map(k => bbProbeTip(k, k)).find(Boolean) ?? null;
+    const topoColor = topoProbeFailing ? '#e0972a' : tc.color;
+    const tipRows = [
+      `<b style="color:${topoColor}">${esc(label)}</b>`,
+      n.ip ? `<span style="color:#7e8aaa">ip:</span> ${esc(n.ip)}` : null,
+      `<span style="color:#7e8aaa">type:</span> ${esc(n.type)}`,
+      topoProbeTipStr,
+    ].filter(Boolean).join('<br>');
+
+    nodes.push({
+      id: n.id,
+      label,
+      shape: 'image',
+      image: ICON[tc.iconFn](topoColor),
+      size: tc.size,
+      font: { color: topoColor, size: 10, face: 'JetBrains Mono', bold: true },
+      title: tipEl(tipRows),
+      _iconFn: tc.iconFn,
+    });
+
+    if (n.parent) {
+      const instance   = mergedTopoToInstance[n.id];
+      const gwInstance = mergedTopoToInstance[n.parent];
+      const inst       = instance ? instances.find(i => (i.labels[instLabel] || '') === instance) : null;
+      const isUp       = inst ? parseFloat(inst.value) === 1 : null; // null = pure topology node
+
+      const _ifRatio = ({ rx, tx, speed }) => {
+        const rate = Math.max(rx ?? 0, tx ?? 0);
+        const cap  = (speed != null && !isNaN(speed) && speed > 0) ? speed : DEFAULT_CAP;
+        return isUp && cap > 0 ? rate / cap : 0;
+      };
+      const _rows = (devs, ifaceFilter, exclude = new Set()) => {
+        const entries = ifaceFilter
+          ? (devs[ifaceFilter] && !exclude.has(ifaceFilter) ? [[ifaceFilter, devs[ifaceFilter]]] : [])
+          : Object.entries(devs).filter(([dev]) => !exclude.has(dev));
+        const rows = entries.map(([dev, iface]) => {
+          const ratio    = _ifRatio(iface);
+          const devColor = ratio >= thresholds.network.red    ? '#f04f4f'
+                         : ratio >= thresholds.network.orange ? '#e0972a' : '#c9d1e8';
+          return `<b style="color:${devColor}">${dev}</b>&nbsp;&nbsp;` +
+                 `<span style="color:#7e8aaa">↓</span> ${formatBytesPerSec(iface.rx)}&nbsp;&nbsp;` +
+                 `<span style="color:#7e8aaa">↑</span> ${formatBytesPerSec(iface.tx)}`;
+        });
+        const worst = entries.reduce((m, [, iface]) => Math.max(m, _ifRatio(iface)), 0);
+        return { rows, worst };
+      };
+
+      const srvRows = _rows(instance   ? (netMetrics[instance]   || {}) : {}, n.interface ?? null, bbPreExclude[instance]   || new Set());
+      const gwRows  = gwInstance ? _rows(netMetrics[gwInstance] || {}, n.interface ?? null, bbPreExclude[gwInstance] || new Set()) : null;
+      const worst   = Math.max(srvRows.worst, gwRows?.worst ?? 0);
+
+      const edgeColor = isUp === null
+        ? (worst >= thresholds.network.red ? '#f04f4f' : worst >= thresholds.network.orange ? '#e0972a' : '#2a3354')
+        : (worst >= thresholds.network.red ? '#f04f4f' : worst >= thresholds.network.orange ? '#e0972a' : isUp ? 'rgba(45,186,110,.3)' : 'rgba(240,79,79,.35)');
+
+      const isBidir = !!gwInstance;
+      const srvName = instance   ? (hostMetrics[instance]?.hostname   || instance.split(':')[0])   : n.id;
+      const gwName  = gwInstance ? (hostMetrics[gwInstance]?.hostname  || gwInstance.split(':')[0]) : n.parent;
+      const hdr     = name => `<b style="color:#c9d1e8">${name}</b>`;
+      const allRows = [
+        ...(srvRows.rows.length ? (isBidir ? [hdr(srvName), ...srvRows.rows] : srvRows.rows) : []),
+        ...(gwRows?.rows?.length ? ['<span style="color:#2a3354">╌╌╌╌╌╌╌╌╌╌╌</span>', hdr(gwName), ...gwRows.rows] : []),
+      ];
+      const tip = allRows.length ? tipEl(allRows.join('<br>')) : undefined;
+
+      edges.push({
+        from: n.parent, to: n.id,
+        width: 2, dashes: isUp === false,
+        color: { color: edgeColor, highlight: tc.color, hover: tc.color },
+        smooth: { type: 'curvedCW', roundness: 0.08 },
+        ...(tip ? { title: tip } : {}),
+      });
+    }
+  });
+
+  // -- Phase 3 : hostToNodeId global lookup -------------------
+  const hostToNodeId = {};
+  topoNodes.forEach(n => {
+    hostToNodeId[n.id] = n.id;
+    if (n.ip) hostToNodeId[n.ip] = n.id;
+    if (n.label) hostToNodeId[n.label] = n.id;
+  });
+  instances.forEach(inst => {
+    const instance = inst.labels[instLabel] || '';
+    const lastCol  = instance.lastIndexOf(':');
+    const host     = lastCol > 0 ? instance.slice(0, lastCol) : instance;
+    const srvId    = `__srv__${instance}`;
+    if (!hostToNodeId[host])     hostToNodeId[host]     = srvId;
+    if (!hostToNodeId[instance]) hostToNodeId[instance] = srvId;
+    // Also index by nodename (node_uname_info) for instances using an IP as label
+    const hn = hostMetrics[instance]?.hostname;
+    if (hn && !hostToNodeId[hn]) hostToNodeId[hn] = srvId;
+  });
+
+  // Augment bbDestByHost with resolved keys so exact lookup works for alias-prefix and suffix cases.
+  // e.g. key "l1-server" -> also index under "server-l1" and "server-l1:9100"
+  Object.entries({ ...bbDestByHost }).forEach(([raw, probes]) => {
+    const rawHost = raw.lastIndexOf(':') > 0 ? raw.slice(0, raw.lastIndexOf(':')) : raw;
+    const addIfMissing = (key) => { if (key && !bbDestByHost[key]) bbDestByHost[key] = probes; };
+    const resolveTarget = (targetHost) => {
+      addIfMissing(targetHost);
+      const nodeRef = hostToNodeId[targetHost];
+      if (nodeRef?.startsWith('__srv__')) addIfMissing(nodeRef.slice(7));
+      const inst = mergedTopoToInstance[targetHost];
+      if (inst) addIfMissing(inst);
+    };
+    // Alias-prefix strip: "l1-server" -> alias "l1" -> remainder "server" -> fuzzy -> "server-l1"
+    let resolved = false;
+    for (const alias of Object.keys(bbDestAliases)) {
+      if (rawHost.length > alias.length && rawHost.startsWith(alias) && '-_.'.includes(rawHost[alias.length])) {
+        const rem = rawHost.slice(alias.length + 1);
+        if (hostToNodeId[rem]) { resolveTarget(rem); resolved = true; break; }
+        const fuzzy = Object.keys(hostToNodeId).find(k =>
+          k.startsWith(rem) && k.length > rem.length && '-_.'.includes(k[rem.length]));
+        if (fuzzy) { resolveTarget(fuzzy); resolved = true; break; }
+      }
+    }
+    // Suffix fuzzy: "l1-server" ends with hostToNodeId key "server"
+    if (!resolved) {
+      for (const k of Object.keys(hostToNodeId)) {
+        if (rawHost !== k && rawHost.endsWith(k) && rawHost.length > k.length &&
+            '-_.'.includes(rawHost[rawHost.length - k.length - 1])) {
+          resolveTarget(k); break;
+        }
+      }
+    }
+  });
+
+  // Re-evaluate probe tips for topo-only nodes: Phase 2 built their tooltip before augmentation,
+  // so any probe that resolves only after bbDestByHost is augmented was missed.
+  topoNodes.forEach(n => {
+    if (mergedTopoIds.has(n.id)) return; // Phase 5 recomputes merged nodes
+    const nodeObj = nodes.find(nd => nd.id === n.id);
+    if (!nodeObj) return;
+    const topoKeys = [n.id, n.label, n.ip].filter(Boolean);
+    const bbStr   = topoKeys.map(k => bbProbeTip(k, k)).find(Boolean) ?? null;
+    const tcpStr  = topoKeys.map(k => tcpTip(k, k)).find(Boolean) ?? null;
+    const httpStr = topoKeys.map(k => httpTip(k, k)).find(Boolean) ?? null;
+    if (!bbStr && !tcpStr && !httpStr) return;
+    const tc = TYPE_CFG[n.type] || TYPE_CFG.switch;
+    const label = n.label ?? n.id;
+    const failing = topoKeys.some(k => bbProbeFailing(k, k) || tcpFailing(k, k) || httpFailing(k, k));
+    const color = failing ? '#e0972a' : tc.color;
+    const tipRows = [
+      `<b style="color:${color}">${esc(label)}</b>`,
+      n.ip ? `<span style="color:#7e8aaa">ip:</span> ${esc(n.ip)}` : null,
+      `<span style="color:#7e8aaa">type:</span> ${esc(n.type)}`,
+      tcpStr,
+      httpStr,
+      bbStr,
+    ].filter(Boolean).join('<br>');
+    nodeObj.image = ICON[tc.iconFn](color);
+    nodeObj.font  = { color, size: 10, face: 'JetBrains Mono', bold: true };
+    nodeObj.title = tipEl(tipRows);
+    if (failing) {
+      const r = [];
+      const key = topoKeys[0];
+      const ft = (tcpByHost[key] || []).filter(p => !p.probeSuccess).map(p => p.service);
+      if (ft.length) r.push(`TCP: ${ft.join(', ')}`);
+      const fh = (httpByHost[key] || []).filter(p => !p.probeSuccess).map(p => p.target.replace(/^https?:\/\//, ''));
+      if (fh.length) r.push(`HTTP: ${fh.join(', ')}`);
+      const fb = findBbProbes(key, key).filter(p => !p.probeSuccess).map(p => p.module);
+      if (fb.length) r.push(`probe: ${fb.join(', ')}`);
+      if (r.length) issues.push({ label, severity: 'orange', reason: r.join(', ') });
+    }
+  });
+
+  // Expand wildcards (*, ?, [...]) in topology lists against hostToNodeId
+  function globToRegex(pattern) {
+    let re = '^';
+    for (const ch of pattern) {
+      if (ch === '*') re += '.*';
+      else if (ch === '?') re += '.';
+      else if ('\\^$.|+(){}'.includes(ch)) re += '\\' + ch;
+      else re += ch;
+    }
+    return new RegExp(re + '$');
+  }
+  function expandWildcardList(list) {
+    if (!Array.isArray(list)) return list;
+    // Include topology/prometheus keys + blackbox probe target hostnames (added to hostToNodeId later in Phase 5b)
+    const allKeys = new Set(Object.keys(hostToNodeId));
+    bbDestRawKeys.forEach(raw => {
+      allKeys.add(raw);
+      const last = raw.lastIndexOf(':');
+      if (last > 0) allKeys.add(raw.slice(0, last));
+    });
+    const result = [];
+    list.forEach(item => {
+      if (typeof item === 'string' && (item.includes('*') || item.includes('?') || item.includes('['))) {
+        const rx = globToRegex(item);
+        const matches = [...allKeys].filter(k => rx.test(k));
+        if (matches.length) result.push(...[...new Set(matches)]);
+        else result.push(item);
+      } else {
+        result.push(item);
+      }
+    });
+    return result;
+  }
+  (topo.zones   || []).forEach(z => { if (z.members)  z.members = expandWildcardList(z.members); });
+  (topo.links   || []).forEach(lk => { if (Array.isArray(lk.to)) lk.to = expandWildcardList(lk.to); });
+  (topo.tunnels || []).forEach(t  => { if (Array.isArray(t.to))  t.to  = expandWildcardList(t.to);  });
+
+  // Index of interfaces declared per link: "nodeIdA:::nodeIdB" -> { ifaceA, ifaceB }
+  const linkIfaceMap = {};
+  (topo.links || []).forEach(lk => {
+    if (!lk.from || !lk.to || !lk.interface) return;
+    const a    = hostToNodeId[lk.from];
+    if (!a) return;
+    const ifA  = Array.isArray(lk.interface) ? lk.interface : [lk.interface];
+    const ifBRaw = lk.interface_to || lk.interface;
+    const ifB  = Array.isArray(ifBRaw) ? ifBRaw : [ifBRaw];
+    const targets = Array.isArray(lk.to) ? lk.to : [lk.to];
+    targets.forEach(toName => {
+      const b = hostToNodeId[toName];
+      if (!b || a === b) return;
+      linkIfaceMap[`${a}:::${b}`] = { ifaceA: ifA, ifaceB: ifB };
+      linkIfaceMap[`${b}:::${a}`] = { ifaceA: ifB, ifaceB: ifA };
+    });
+  });
+
+  // Tunnel interfaces to exclude from normal link tooltips (instance -> Set<iface>)
+  const tunnelIfaceExclude = {};
+  const addExclude = (nodeId, iface) => {
+    if (!nodeId || !iface) return;
+    const inst = mergedTopoToInstance[nodeId] ?? (nodeId.startsWith('__srv__') ? nodeId.slice(7) : null);
+    if (!inst) return;
+    if (!tunnelIfaceExclude[inst]) tunnelIfaceExclude[inst] = new Set();
+    tunnelIfaceExclude[inst].add(iface);
+  };
+  (topo.tunnels || []).forEach(t => {
+    if (!t.interface) return;
+    const toList = Array.isArray(t.to) ? t.to : (t.to ? [t.to] : []);
+    addExclude(hostToNodeId[t.from], t.interface);
+    toList.forEach(toName => addExclude(hostToNodeId[toName], t.interface_to || t.interface));
+  });
+  // Merge blackbox exclusions -> Phase 5 (filterDevs) will honor them automatically
+  Object.entries(bbPreExclude).forEach(([inst, ifaces]) => {
+    if (!tunnelIfaceExclude[inst]) tunnelIfaceExclude[inst] = new Set();
+    ifaces.forEach(iface => tunnelIfaceExclude[inst].add(iface));
+  });
+
+  // -- Phase 4 : zone nodes -----------------------------------
+  const zones = topo.zones || [];
+  const zoneNodeId = id => `__zone__${id}`;
+
+  // Recursive resolution: zone -> zone -> ... -> topology node
+  const topoNodeIds   = new Set(topoNodes.map(n => n.id));
+  const zoneParentMap = Object.fromEntries(zones.map(z => [z.id, z.parent]));
+
+  function resolveZoneNode(zoneId) {
+    let cur = zoneParentMap[zoneId];
+    const seen = new Set([zoneId]);
+    while (cur && !topoNodeIds.has(cur)) {
+      if (seen.has(cur)) return null; // cycle
+      seen.add(cur);
+      cur = zoneParentMap[cur];
+    }
+    return cur || null;
+  }
+
+  const zoneById    = Object.fromEntries(zones.map(z => [z.id, resolveZoneNode(z.id)]));
+  const zoneDefaultParent = Object.fromEntries(
+    zones.filter(z => z.default_parent).map(z => [z.id, hostToNodeId[z.default_parent] ?? z.default_parent])
+  );
+
+  // For explicitly declared members: nodeId -> gwId of their zone
+  const memberZoneGw = {};
+  zones.forEach(z => {
+    if (!Array.isArray(z.members) || !z.members.length) return;
+    const gw = zoneDefaultParent[z.id] ?? zoneById[z.id];
+    if (!gw) return;
+    z.members.forEach(name => {
+      const nodeId = hostToNodeId[name] ?? (topoNodeIds.has(name) ? name : null);
+      if (nodeId) memberZoneGw[nodeId] = gw;
+    });
+  });
+
+  const zoneMembers = {}; // zoneId -> [srvId]
+
+  // Draw order: parents before children (parent bubbles underneath)
+  const zoneIds     = new Set(zones.map(z => z.id));
+  const zonesSorted = [...zones].sort((a, b) => {
+    // a before b if b descends from a
+    let cur = zoneParentMap[b.id];
+    while (cur && zoneIds.has(cur)) { if (cur === a.id) return -1; cur = zoneParentMap[cur]; }
+    return 0;
+  });
+
+  // -- Phase 5 : Prometheus instances ------------------------
+  const fallback = topoNodes.find(n => n.type==='router')?.id
+                || topoNodes.find(n => n.type==='switch')?.id
+                || null;
+
+
+  let up = 0, down = 0;
+
+  instances.forEach(inst => {
+    const val     = parseFloat(inst.value);
+    const isUp    = val === 1;
+    const unknown = isNaN(val);
+    if (isUp) up++; else if (!unknown) down++;
+
+    const instance  = inst.labels[instLabel] || '?';
+    const ip        = extractIp(instance);
+    const lastCol   = instance.lastIndexOf(':');
+    const host      = lastCol > 0 ? instance.slice(0, lastCol) : instance;
+    const failed    = systemdFailed[instance] || [];
+    const hm        = hostMetrics[instance] || {};
+    const now       = Date.now() / 1000;
+    const cpuRatio  = hm.cpuIdle  != null ? 1 - hm.cpuIdle  : null;
+    const memRatio  = hm.memTotal  > 0    ? 1 - hm.memAvail / hm.memTotal   : null;
+    const diskRatio = hm.diskTotal > 0    ? 1 - hm.diskAvail / hm.diskTotal : null;
+    const metricPeak = Math.max(0, ...[cpuRatio, memRatio, diskRatio].filter(r => r != null));
+    const nodeId    = mergedTopoIds.has(host) ? host : mergedTopoIds.has(instance) ? instance : null; // null = no topology match, getThr falls back to global thresholds
+    const isRed = thrColors && (
+      (cpuRatio  != null && cpuRatio  >= getThr(nodeId, 'cpu',  'red')) ||
+      (memRatio  != null && memRatio  >= getThr(nodeId, 'mem',  'red')) ||
+      (diskRatio != null && diskRatio >= getThr(nodeId, 'disk', 'red'))
+    );
+    const isOrg = !isRed && (
+      (thrColors && (
+        (cpuRatio  != null && cpuRatio  >= getThr(nodeId, 'cpu',  'orange')) ||
+        (memRatio  != null && memRatio  >= getThr(nodeId, 'mem',  'orange')) ||
+        (diskRatio != null && diskRatio >= getThr(nodeId, 'disk', 'orange'))
+      )) ||
+      failed.length > 0 || tcpFailing(instance, host) || httpFailing(instance, host) || bbProbeFailing(instance, host)
+    );
+    const color = unknown ? '#3d4560' : !isUp ? '#f04f4f'
+      : isRed ? '#f04f4f' : isOrg ? '#e0972a' : '#2dba6e';
+
+    if (color === '#f04f4f' || color === '#e0972a') {
+      const nodeLabel = hostMetrics[instance]?.hostname || host;
+      const r = [];
+      if (!isUp) r.push('down');
+      else {
+        if (thrColors && cpuRatio  != null && cpuRatio  >= getThr(nodeId, 'cpu',  'orange')) r.push(`CPU ${(cpuRatio *100).toFixed(0)}%`);
+        if (thrColors && memRatio  != null && memRatio  >= getThr(nodeId, 'mem',  'orange')) r.push(`RAM ${(memRatio *100).toFixed(0)}%`);
+        if (thrColors && diskRatio != null && diskRatio >= getThr(nodeId, 'disk', 'orange')) r.push(`disk ${(diskRatio*100).toFixed(0)}%`);
+        if (failed.length > 0) r.push(`failed: ${failed.join(', ')}`);
+        const ft = (tcpByHost[instance] || tcpByHost[host] || []).filter(p => !p.probeSuccess).map(p => p.service);
+        if (ft.length) r.push(`TCP: ${ft.join(', ')}`);
+        const fh = (httpByHost[instance] || httpByHost[host] || []).filter(p => !p.probeSuccess).map(p => p.target.replace(/^https?:\/\//, ''));
+        if (fh.length) r.push(`HTTP: ${fh.join(', ')}`);
+        const fb = findBbProbes(instance, host).filter(p => !p.probeSuccess).map(p => p.module);
+        if (fb.length) r.push(`probe: ${fb.join(', ')}`);
+      }
+      if (r.length) issues.push({ label: nodeLabel, severity: color === '#f04f4f' ? 'red' : 'orange', reason: r.join(', ') });
+    }
+
+    // This host is already represented by a topology node -- update icon + full tooltip
+    if (mergedTopoIds.has(host) || mergedTopoIds.has(instance)) {
+      const topoId   = mergedTopoIds.has(host) ? host : instance;
+      const topoNode = nodes.find(nd => nd.id === topoId);
+      if (topoNode) {
+        const topoN    = topoNodes.find(n => n.id === topoId);
+        const tc       = TYPE_CFG[topoN?.type] || TYPE_CFG.switch;
+        const row = (label, val) => `<span style="color:#7e8aaa">${label}</span> ${val}`;
+        const pct = (ratio, metric = 'cpu', digits = 1) => ratio != null
+          ? `<b style="color:${
+              ratio >= getThr(nodeId, metric, 'red')    ? '#f04f4f' :
+              ratio >= getThr(nodeId, metric, 'orange') ? '#e0972a' : '#2dba6e'
+            }">${(ratio * 100).toFixed(digits)}%</b>` : '—';
+
+        const lines = [
+          `<b style="color:${tc.color}">${esc(topoN?.label || topoId)}</b>`,
+          hm.hostname ? row('hostname:', `<span style="color:#c9d1e8">${esc(hm.hostname)}</span>`) : null,
+          hm.os       ? row('OS:', `<span style="color:#c9d1e8">${esc(hm.os)}</span>`) : null,
+          cpuRatio  != null ? row('CPU:', `${pct(cpuRatio, 'cpu')}  <span style="color:#7e8aaa">load:</span> ${hm.load1?.toFixed(2) ?? '—'}`) : null,
+          memRatio  != null ? row('RAM:', `${pct(memRatio, 'mem')}  ${formatBytes(hm.memTotal - hm.memAvail)} / ${formatBytes(hm.memTotal)}`) : null,
+          diskRatio != null ? row('Disk:', `${pct(diskRatio, 'disk')}  ${formatBytes(hm.diskTotal - hm.diskAvail)} / ${formatBytes(hm.diskTotal)}`) : null,
+          hm.bootTime ? row('Up:', `<span style="color:#c9d1e8">${formatUptime(now - hm.bootTime)}</span>`) : null,
+          row('status:', `<b style="color:${color}">${isUp ? 'UP' : unknown ? '?' : 'DOWN'}</b>`),
+          failed.length > 0
+            ? `<span style="color:#e0972a">&#9888; failed:</span><br>${failed.map(u => `&nbsp;&nbsp;<span style="color:#f04f4f">${esc(u)}</span>`).join('<br>')}`
+            : null,
+          tcpTip(instance, host),
+          httpTip(instance, host),
+          bbProbeTip(instance, host),
+          libvirtVmTip(instance, host),
+        ].filter(Boolean).join('<br>');
+
+        topoNode.image = ICON[tc.iconFn](color);
+        topoNode.font  = { ...topoNode.font, color };
+        topoNode.title = tipEl(lines);
+        if (isUp && thrColors && metricPeak >= 1.0) blinkNodes.add(topoId);
+      }
+      return;
+    }
+    const short    = host.length > 18 ? host.slice(0, 16)+'…' : host;
+    const srvId    = `__srv__${instance}`;
+
+    // Priority: topology override > network label > parent (job=vm) > zone > CIDR > fallback
+    let gwId = fallback;
+    for (const net of networks) {
+      if (net.cidr && ipInCidr(ip, net.cidr)) { gwId = net.gateway; break; }
+    }
+    if (memberZoneGw[srvId]) {
+      gwId = memberZoneGw[srvId];
+    }
+    if (inst.labels.zone && zoneById[inst.labels.zone]) {
+      gwId = zoneDefaultParent[inst.labels.zone] ?? zoneById[inst.labels.zone];
+      // Add the host to this zone and to every ancestor zone
+      let zId = inst.labels.zone;
+      const visited = new Set();
+      while (zId && zoneIds.has(zId) && !visited.has(zId)) {
+        visited.add(zId);
+        if (!zoneMembers[zId]) zoneMembers[zId] = [];
+        zoneMembers[zId].push(srvId);
+        zId = zoneParentMap[zId];
+      }
+    }
+    if (inst.labels.job === 'vm' && inst.labels.parent) {
+      gwId = hostToNodeId[inst.labels.parent] || inst.labels.parent;
+    }
+    if (inst.labels.network) {
+      const byLabel = networks.find(n => n.label===inst.labels.network || n.cidr===inst.labels.network);
+      if (byLabel) gwId = byLabel.gateway;
+    }
+    if (promParentOverride[srvId]) {
+      gwId = promParentOverride[srvId];
+    }
+
+    const row = (label, val) =>
+      `<span style="color:#7e8aaa">${label}</span> ${val}`;
+    const pct = (ratio, metric = 'cpu', digits = 1) => ratio != null
+      ? `<b style="color:${
+          ratio >= getThr(nodeId, metric, 'red')    ? '#f04f4f' :
+          ratio >= getThr(nodeId, metric, 'orange') ? '#e0972a' : '#2dba6e'
+        }">${(ratio * 100).toFixed(digits)}%</b>` : '—';
+
+    const tipRows = [
+      hm.hostname  ? `<b style="color:#c9d1e8">${esc(hm.hostname)}</b>` : null,
+      hm.os        ? row('OS:', `<span style="color:#c9d1e8">${esc(hm.os)}</span>`) : null,
+      cpuRatio != null
+        ? row('CPU:', `${pct(cpuRatio, 'cpu')}  <span style="color:#7e8aaa">load:</span> ${hm.load1 != null ? hm.load1.toFixed(2) : '—'}`)
+        : null,
+      memRatio != null
+        ? row('RAM:', `${pct(memRatio, 'mem')}  ${formatBytes(hm.memTotal - hm.memAvail)} / ${formatBytes(hm.memTotal)}`)
+        : null,
+      diskRatio != null
+        ? row('Disk:', `${pct(diskRatio, 'disk')}  ${formatBytes(hm.diskTotal - hm.diskAvail)} / ${formatBytes(hm.diskTotal)}`)
+        : null,
+      hm.bootTime  ? row('Up:', `<span style="color:#c9d1e8">${formatUptime(now - hm.bootTime)}</span>`) : null,
+      row('status:', `<b style="color:${color}">${isUp ? 'UP' : unknown ? '?' : 'DOWN'}</b>`),
+      failed.length > 0
+        ? `<span style="color:#e0972a">&#9888; failed:</span><br>${failed.map(u => `&nbsp;&nbsp;<span style="color:#f04f4f">${esc(u)}</span>`).join('<br>')}`
+        : null,
+      tcpTip(instance, host),
+      httpTip(instance, host),
+      bbProbeTip(instance, host),
+      libvirtVmTip(instance, host),
+    ].filter(Boolean).join('<br>');
+
+    nodes.push({
+      id: srvId,
+      label: short,
+      shape: 'image',
+      image: ICON.server(color),
+      size: 18,
+      font: { color, size: 10, face: 'JetBrains Mono' },
+      title: tipEl(tipRows),
+      _iconFn: 'server',
+    });
+    if (isUp && thrColors && metricPeak >= 1.0) blinkNodes.add(srvId);
+
+    if (gwId) {
+      const gwInstance = mergedTopoToInstance[gwId]                       // merged topology node
+                      ?? (gwId.startsWith('__srv__') ? gwId.slice(7) : null); // host Prometheus direct
+      const isBidir    = !!gwInstance;
+
+      const ifaceRatio = ({ rx, tx, speed }) => {
+        const rate = Math.max(rx ?? 0, tx ?? 0);
+        const cap  = (speed != null && !isNaN(speed) && speed > 0) ? speed : DEFAULT_CAP;
+        return isUp && cap > 0 ? rate / cap : 0;
+      };
+
+      const buildEdgeRows = (devs) => {
+        const rows = Object.entries(devs).map(([dev, iface]) => {
+          const ratio    = ifaceRatio(iface);
+          const devColor = ratio >= thresholds.network.red    ? '#f04f4f'
+                         : ratio >= thresholds.network.orange ? '#e0972a' : '#c9d1e8';
+          return `<b style="color:${devColor}">${dev}</b>&nbsp;&nbsp;` +
+                 `<span style="color:#7e8aaa">↓</span> ${formatBytesPerSec(iface.rx)}&nbsp;&nbsp;` +
+                 `<span style="color:#7e8aaa">↑</span> ${formatBytesPerSec(iface.tx)}`;
+        });
+        const worst = Object.values(devs).reduce((m, iface) => Math.max(m, ifaceRatio(iface)), 0);
+        return { rows, worst };
+      };
+
+      const linkDecl   = linkIfaceMap[`${srvId}:::${gwId}`] || null;
+      const filterDevs = (devs, iface, exclude = new Set()) => {
+        const filtered = Object.fromEntries(Object.entries(devs).filter(([dev]) => !exclude.has(dev)));
+        if (!iface) return filtered;
+        const ifaces = Array.isArray(iface) ? iface : [iface];
+        const result = Object.fromEntries(ifaces.filter(i => filtered[i]).map(i => [i, filtered[i]]));
+        return Object.keys(result).length ? result : filtered;
+      };
+      const srvExclude = tunnelIfaceExclude[instance]   || new Set();
+      const gwExclude  = tunnelIfaceExclude[gwInstance] || new Set();
+
+      const srvRows = buildEdgeRows(filterDevs(netMetrics[instance]   || {}, linkDecl?.ifaceA, srvExclude));
+      const gwRows  = isBidir ? buildEdgeRows(filterDevs(netMetrics[gwInstance] || {}, linkDecl?.ifaceB, gwExclude)) : null;
+
+      const combinedWorst = Math.max(srvRows.worst, gwRows?.worst ?? 0);
+      const edgeColor = thrColors && combinedWorst >= thresholds.network.red    ? '#f04f4f'
+                      : thrColors && combinedWorst >= thresholds.network.orange ? '#e0972a'
+                      : isUp                                                    ? 'rgba(45,186,110,.3)'
+                      :                                                           'rgba(240,79,79,.35)';
+
+      const srvName = hostMetrics[instance]?.hostname   || host;
+      const gwName  = gwInstance ? (hostMetrics[gwInstance]?.hostname || gwInstance.split(':')[0]) : null;
+      const hdr = name => `<b style="color:#c9d1e8">${name}</b>`;
+
+      const allRows = [
+        ...(srvRows.rows.length ? (isBidir ? [hdr(srvName), ...srvRows.rows] : srvRows.rows) : []),
+        ...(gwRows?.rows?.length ? ['<span style="color:#2a3354">╌╌╌╌╌╌╌╌╌╌╌</span>', hdr(gwName), ...gwRows.rows] : []),
+      ];
+      const tip = allRows.length ? tipEl(allRows.join('<br>')) : undefined;
+
+      const arrowOpts = isBidir
+        ? { arrows: { from: { enabled: true, scaleFactor: 0.45 }, to: { enabled: true, scaleFactor: 0.45 } } }
+        : {};
+
+      edges.push({
+        from: gwId, to: srvId,
+        width: 1, dashes: !isUp,
+        color: { color: edgeColor, highlight: edgeColor, hover: edgeColor },
+        smooth: { type: 'curvedCW', roundness: 0.1 },
+        ...arrowOpts,
+        ...(tip ? { title: tip } : {}),
+      });
+    }
+  });
+
+  // Zone members declared explicitly in topology.yaml (zone.members: [...])
+  // Probe-only targets (blackbox ICMP...) are not in hostToNodeId yet at this point --
+  // they are registered in Phase 5b. We defer them to deferredZoneMembers.
+  const deferredZoneMembers = [];
+  const resolveZoneMember = (name, zoneId) => {
+    const nodeId = hostToNodeId[name] ?? (topoNodeIds.has(name) ? name : null);
+    if (!nodeId) return false;
+    let zId = zoneId;
+    const visited = new Set();
+    while (zId && zoneIds.has(zId) && !visited.has(zId)) {
+      visited.add(zId);
+      if (!zoneMembers[zId]) zoneMembers[zId] = [];
+      if (!zoneMembers[zId].includes(nodeId)) zoneMembers[zId].push(nodeId);
+      zId = zoneParentMap[zId];
+    }
+    return true;
+  };
+  zones.forEach(z => {
+    if (!Array.isArray(z.members) || z.members.length === 0) return;
+    z.members.forEach(name => {
+      if (!resolveZoneMember(name, z.id)) deferredZoneMembers.push({ name, zoneId: z.id });
+    });
+  });
+
+  // Zone propagation to topology children: if a parent is in a zone,
+  // its topology children are added automatically (unless inherit_zone: false)
+  const topoChildrenMap = {};
+  topoNodes.forEach(n => {
+    if (n.parent) {
+      if (!topoChildrenMap[n.parent]) topoChildrenMap[n.parent] = [];
+      topoChildrenMap[n.parent].push({ id: n.id, inherit: n.inherit_zone !== false });
+    }
+  });
+
+  let propagating = true;
+  while (propagating) {
+    propagating = false;
+    Object.entries(zoneMembers).forEach(([zId, members]) => {
+      [...members].forEach(memberId => {
+        (topoChildrenMap[memberId] || []).forEach(({ id: childId, inherit }) => {
+          if (inherit && !members.includes(childId)) {
+            members.push(childId);
+            propagating = true;
+          }
+        });
+      });
+    });
+  }
+
+  // Edges to default_parent for topology nodes member of a zone without a declared parent
+  const topoNoParent = new Set(topoNodes.filter(n => !n.parent).map(n => n.id));
+  Object.entries(zoneMembers).forEach(([zId, members]) => {
+    const gwId = zoneDefaultParent[zId];
+    if (!gwId) return;
+    members.forEach(memberId => {
+      if (!topoNoParent.has(memberId) || memberId === gwId) return;
+      const alreadyLinked = edges.some(e =>
+        (e.from === gwId && e.to === memberId) || (e.from === memberId && e.to === gwId)
+      );
+      if (alreadyLinked) return;
+
+      const topoN    = topoNodes.find(n => n.id === memberId);
+      const tc       = TYPE_CFG[topoN?.type] || TYPE_CFG.switch;
+      const instance = mergedTopoToInstance[memberId]; // set only if the Prometheus node was merged
+      let edgeColor  = '#2a3354';
+      let isUp       = false;
+      let edgeDashes = false;
+      let tip;
+
+      if (instance) {
+        const inst = instances.find(i => (i.labels[instLabel] || '') === instance);
+        isUp = inst ? parseFloat(inst.value) === 1 : false;
+        edgeDashes = !isUp;
+
+        const gwInstance = mergedTopoToInstance[gwId] ?? (gwId.startsWith('__srv__') ? gwId.slice(7) : null);
+        const linkDecl   = linkIfaceMap[`${memberId}:::${gwId}`] || null;
+        const srvExclude = tunnelIfaceExclude[instance]   || new Set();
+        const gwExclude  = tunnelIfaceExclude[gwInstance] || new Set();
+
+        const _filterDevs = (devs, iface, excl) => {
+          const f = Object.fromEntries(Object.entries(devs).filter(([d]) => !excl.has(d)));
+          if (!iface) return f;
+          const ifaces = Array.isArray(iface) ? iface : [iface];
+          const result = Object.fromEntries(ifaces.filter(i => f[i]).map(i => [i, f[i]]));
+          return Object.keys(result).length ? result : f;
+        };
+        const _ifaceRatio = ({ rx, tx, speed }) => {
+          const rate = Math.max(rx ?? 0, tx ?? 0);
+          const cap  = (speed != null && !isNaN(speed) && speed > 0) ? speed : DEFAULT_CAP;
+          return isUp && cap > 0 ? rate / cap : 0;
+        };
+        const _buildRows = devs => {
+          const rows = Object.entries(devs).map(([dev, iface]) => {
+            const ratio    = _ifaceRatio(iface);
+            const devColor = ratio >= thresholds.network.red    ? '#f04f4f'
+                           : ratio >= thresholds.network.orange ? '#e0972a' : '#c9d1e8';
+            return `<b style="color:${devColor}">${dev}</b>&nbsp;&nbsp;` +
+                   `<span style="color:#7e8aaa">↓</span> ${formatBytesPerSec(iface.rx)}&nbsp;&nbsp;` +
+                   `<span style="color:#7e8aaa">↑</span> ${formatBytesPerSec(iface.tx)}`;
+          });
+          const worst = Object.values(devs).reduce((m, iface) => Math.max(m, _ifaceRatio(iface)), 0);
+          return { rows, worst };
+        };
+
+        const srvRows = _buildRows(_filterDevs(netMetrics[instance]   || {}, linkDecl?.ifaceA, srvExclude));
+        const gwRows  = gwInstance ? _buildRows(_filterDevs(netMetrics[gwInstance] || {}, linkDecl?.ifaceB, gwExclude)) : null;
+        const worst   = Math.max(srvRows.worst, gwRows?.worst ?? 0);
+
+        edgeColor = thrColors && worst >= thresholds.network.red    ? '#f04f4f'
+                  : thrColors && worst >= thresholds.network.orange ? '#e0972a'
+                  : isUp                                            ? 'rgba(45,186,110,.3)'
+                  :                                                   'rgba(240,79,79,.35)';
+
+        const isBidir  = !!gwInstance;
+        const srvName  = hostMetrics[instance]?.hostname   || instance.split(':')[0];
+        const gwName   = gwInstance ? (hostMetrics[gwInstance]?.hostname || gwInstance.split(':')[0]) : null;
+        const hdr      = name => `<b style="color:#c9d1e8">${esc(name)}</b>`;
+        const allRows  = [
+          ...(srvRows.rows.length ? (isBidir ? [hdr(srvName), ...srvRows.rows] : srvRows.rows) : []),
+          ...(gwRows?.rows?.length ? ['<span style="color:#2a3354">╌╌╌╌╌╌╌╌╌╌╌</span>', hdr(gwName), ...gwRows.rows] : []),
+        ];
+        if (allRows.length) tip = tipEl(allRows.join('<br>'));
+      }
+
+      edges.push({
+        from: gwId, to: memberId,
+        width: instance ? 1 : 2,
+        dashes: edgeDashes,
+        color: { color: edgeColor, highlight: tc.color, hover: tc.color },
+        smooth: { type: 'curvedCW', roundness: 0.08 },
+        ...(tip ? { title: tip } : {}),
+      });
+    });
+  });
+
+  // Invisible intra-zone edges: physics groups the members and separates the zones
+  Object.entries(zoneMembers).forEach(([, members]) => {
+    for (let i = 1; i < members.length; i++) {
+      edges.push({
+        _zoneEdge: true,
+        from: members[0], to: members[i],
+        color: { color: 'rgba(0,0,0,0)', highlight: 'rgba(0,0,0,0)', hover: 'rgba(0,0,0,0)' },
+        width: 0, hoverWidth: 0, selectionWidth: 0,
+        length: 30, smooth: false,
+      });
+    }
+  });
+
+  // Only show root zones (parent = topology node, not another zone)
+  const zonesDisplay = zonesSorted.filter(z => !zoneIds.has(z.parent));
+
+  // -- Phase 5b: probe-only nodes (TCP/HTTP/ICMP/SSH probe without node_exporter) --
+  const probeOnlyCreated = new Set();
+  [...tcpRawKeys, ...httpRawKeys, ...bbDestRawKeys].forEach(raw => {
+    if (!raw || probeOnlyCreated.has(raw)) return;
+    const last = raw.lastIndexOf(':');
+    const host = last > 0 ? raw.slice(0, last) : raw;
+    if (hostToNodeId[raw] || hostToNodeId[host]) return; // already in graph
+    // Alias-prefix strip: "l1-server" -> alias "l1" -> remainder "server" -> node "server-l1" starts with "server"
+    if (Object.keys(bbDestAliases).some(alias => {
+      if (host.length <= alias.length || !host.startsWith(alias) || !'-_.'.includes(host[alias.length])) return false;
+      const rem = host.slice(alias.length + 1);
+      if (hostToNodeId[rem]) return true;
+      return Object.keys(hostToNodeId).some(k =>
+        k.startsWith(rem) && k.length > rem.length && '-_.'.includes(k[rem.length]));
+    })) return;
+    // Suffix fuzzy: key "l1-server" already covered by a node whose id ends with "-server"
+    if (Object.keys(hostToNodeId).some(k =>
+      k !== host && host.endsWith(k) && host.length > k.length && '-_.'.includes(host[host.length - k.length - 1])
+    )) return;
+    probeOnlyCreated.add(raw);
+
+    const color   = (tcpFailing(raw, host) || httpFailing(raw, host) || bbProbeFailing(raw, host)) ? '#e0972a' : '#2dba6e';
+    const short   = host.length > 18 ? host.slice(0, 16) + '…' : host;
+    const tipLines = [
+      `<b style="color:${color}">${esc(host)}</b>`,
+      tcpTip(raw, host),
+      httpTip(raw, host),
+      bbProbeTip(raw, host),
+    ].filter(Boolean).join('<br>');
+
+    const probeNodeId = `__probe__${raw}`;
+    nodes.push({
+      id: probeNodeId,
+      label: short,
+      shape: 'image',
+      image: ICON.server(color),
+      size: 16,
+      font: { color, size: 9, face: 'JetBrains Mono' },
+      title: tipEl(tipLines),
+    });
+    // Register in hostToNodeId so Phase 7 (collectBlackbox) can create edges to this node
+    hostToNodeId[raw] = probeNodeId;
+    if (host !== raw) hostToNodeId[host] = probeNodeId;
+  });
+
+  // -- Phase 5c: libvirt VM nodes (VMs without node_exporter not yet in the graph) --
+  if (libvirtData?.instances) {
+    const libvirtVmSeen = new Set();
+    libvirtData.instances.forEach(inst => {
+      const domain = inst.labels.domain || inst.labels.domainname || '';
+      if (!domain || libvirtVmSeen.has(domain)) return;
+      if (hostToNodeId[domain]) return;
+
+      const raw     = inst.labels[libvirtInstLabel] || '';
+      const lastCol = raw.lastIndexOf(':');
+      const hvHost  = lastCol > 0 ? raw.slice(0, lastCol) : raw;
+      const hypId   = hostToNodeId[hvHost] || hostToNodeId[raw];
+      if (!hypId) return;
+
+      libvirtVmSeen.add(domain);
+
+      const v     = parseFloat(inst.value);
+      const color = v === 1 ? '#2dba6e' : (v === 3 || v === 7) ? '#e0972a' : v === 6 ? '#f04f4f' : '#c084fc';
+      const icon  = v === 1 ? '▶' : v === 3 ? '⏸' : v === 5 ? '□' : v === 6 ? '✖' : v === 7 ? '⏾' : '◌';
+      const stateLabel = inst.labels.state_desc || (v === 1 ? 'running' : v === 3 ? 'paused' : v === 5 ? 'shut off' : v === 6 ? 'crashed' : 'unknown');
+      const short  = domain.length > 18 ? domain.slice(0, 16) + '…' : domain;
+
+      const vmId = `__libvirt__${hvHost}__${domain}`;
+      nodes.push({
+        id: vmId,
+        _libvirtOff: color === '#c084fc',
+        _libvirtUp:  color === '#2dba6e',
+        label: short,
+        shape: 'image',
+        image: ICON.vm(color),
+        size: 14,
+        font: { color, size: 9, face: 'JetBrains Mono' },
+        title: tipEl([
+          `<b style="color:#c084fc">${esc(domain)}</b>`,
+          `<span style="color:#7e8aaa">state:</span> <span style="color:${color}">${icon} ${esc(stateLabel)}</span>`,
+        ].join('<br>')),
+      });
+      hostToNodeId[domain] = vmId;
+
+      edges.push({
+        from: hypId, to: vmId,
+        width: 1, dashes: [4, 3],
+        color: { color: '#3d4560', highlight: '#3d4560', hover: '#3d4560' },
+        smooth: { type: 'curvedCW', roundness: 0.1 },
+      });
+    });
+  }
+
+  // Deferred resolution of zone members (probe-only Phase 5b + libvirt VMs Phase 5c)
+  // Wildcard patterns that had no matches at topology parse time are re-expanded here
+  // against the now-complete hostToNodeId (which includes libvirt VM nodes).
+  deferredZoneMembers.forEach(({ name, zoneId }) => {
+    if (name.includes('*') || name.includes('?') || name.includes('[')) {
+      const rx = globToRegex(name);
+      const matches = Object.keys(hostToNodeId).filter(k => rx.test(k));
+      if (matches.length) matches.forEach(m => resolveZoneMember(m, zoneId));
+      else warnings.push(`Zone member not resolved: "${name}" (zone: ${zoneId})`);
+    } else {
+      if (!resolveZoneMember(name, zoneId))
+        warnings.push(`Zone member not resolved: "${name}" (zone: ${zoneId})`);
+    }
+  });
+
+  // -- Phase 6 : WireGuard tunnels ----------------------------
+  // Creates a ghost node for endpoints that do not exist in the graph yet
+  const resolveOrGhost = (name) => {
+    if (hostToNodeId[name]) return hostToNodeId[name];
+    const ghostId = `__ghost__${name}`;
+    if (!nodes.find(n => n.id === ghostId)) {
+      const short = name.length > 18 ? name.slice(0, 16) + '…' : name;
+      nodes.push({
+        id: ghostId,
+        label: short,
+        shape: 'image',
+        image: ICON.server('#3d4560'),
+        size: 18,
+        font: { color: '#3d4560', size: 10, face: 'JetBrains Mono' },
+        title: tipEl(`<span style="color:#7e8aaa">${esc(name)}</span><br><span style="color:#3d4560">not in Prometheus</span>`),
+      });
+    }
+    return ghostId;
+  };
+
+  (topo.tunnels || []).forEach(t => {
+    if (!t.from || !t.to) return;
+    const fromId  = resolveOrGhost(t.from);
+    const iface       = t.interface        || null;
+    const parentIface = t.parent_interface || null;
+    const instanceFrom = mergedTopoToInstance[fromId] ?? (fromId.startsWith('__srv__') ? fromId.slice(7) : null);
+
+    const toList = Array.isArray(t.to) ? t.to : [t.to];
+    toList.forEach(toName => {
+      const toId = resolveOrGhost(toName);
+      if (fromId === toId) return;
+
+      const instanceTo = mergedTopoToInstance[toId] ?? (toId.startsWith('__srv__') ? toId.slice(7) : null);
+      const ifaceTo    = t.interface_to || iface;
+
+      let edgeColor    = '#3d4560';
+      let tip          = null;
+      let wgHasTraffic = false;
+      let wgRatio      = 0;
+
+      if (iface) {
+        const devFrom = instanceFrom ? netMetrics[instanceFrom]?.[iface]         : null;
+        const devTo   = instanceTo && ifaceTo ? netMetrics[instanceTo]?.[ifaceTo] : null;
+
+        if (devFrom || devTo) {
+          wgHasTraffic = (devFrom?.rx ?? 0) + (devFrom?.tx ?? 0) + (devTo?.rx ?? 0) + (devTo?.tx ?? 0) > 0;
+
+          if (wgHasTraffic) {
+            const rate    = Math.max(devFrom?.rx ?? 0, devFrom?.tx ?? 0, devTo?.rx ?? 0, devTo?.tx ?? 0);
+            const capSpeed = parentIface ? (netMetrics[instanceFrom]?.[parentIface]?.speed ?? 0) : 0;
+            const cap      = capSpeed > 0 ? capSpeed : DEFAULT_CAP;
+            wgRatio   = rate / cap;
+            edgeColor = thrColors && wgRatio >= thresholds.network.red    ? '#f04f4f'
+                      : thrColors && wgRatio >= thresholds.network.orange ? '#e0972a' : '#4a8adf';
+            if (thrColors && wgRatio >= thresholds.network.orange) issues.push({ label: `${t.from} ↔ ${toName}`, severity: wgRatio >= thresholds.network.red ? 'red' : 'orange', reason: `WireGuard ${(wgRatio*100).toFixed(0)}%` });
+          }
+
+          const rows = [];
+          if (devFrom) rows.push(
+            `<b style="color:#c9d1e8">${esc(t.from)}</b> <span style="color:#7e8aaa">${esc(iface)}</span>&nbsp;&nbsp;` +
+            `<span style="color:#7e8aaa">↓</span> ${formatBytesPerSec(devFrom.rx)}&nbsp;&nbsp;` +
+            `<span style="color:#7e8aaa">↑</span> ${formatBytesPerSec(devFrom.tx)}`
+          );
+          if (devTo) rows.push(
+            `<b style="color:#c9d1e8">${esc(toName)}</b> <span style="color:#7e8aaa">${esc(ifaceTo)}</span>&nbsp;&nbsp;` +
+            `<span style="color:#7e8aaa">↓</span> ${formatBytesPerSec(devTo.rx)}&nbsp;&nbsp;` +
+            `<span style="color:#7e8aaa">↑</span> ${formatBytesPerSec(devTo.tx)}`
+          );
+          if (rows.length) tip = tipEl(rows.join('<br>'));
+        }
+      }
+
+      edges.push({
+        id: `__wg__${t.from}__${toName}`,
+        from: fromId,
+        to: toId,
+        dashes: [8, 5],
+        width: 1.5,
+        color: { color: edgeColor, hover: '#4a8adf' },
+        smooth: { type: 'curvedCCW', roundness: 0.25 },
+        arrows: { from: { enabled: true, scaleFactor: 0.45 }, to: { enabled: true, scaleFactor: 0.45 } },
+        _wgInstance: instanceFrom,
+        _wgIface: iface,
+        _wgHasTraffic: wgHasTraffic,
+        _wgRatio: wgRatio,
+        ...(tip ? { title: tip } : {}),
+      });
+    }); // fin toList.forEach
+  }); // fin topo.tunnels.forEach
+
+  // -- Phase 7 : blackbox probes (ICMP + SSH banner) ---------
+  // Fuzzy resolution: "server-l1" -> node "server" if the next character is - _ .
+  const fuzzyNodeResolve = (raw) => {
+    if (!raw) return null;
+    for (const [key, nodeId] of Object.entries(hostToNodeId)) {
+      if (raw !== key && raw.startsWith(key) && '-_.'.includes(raw[key.length])) return nodeId;
+    }
+    return null;
+  };
+
+  // Grouping by unordered pair: (A,B) and (B,A) -> same key
+  // Structure : { nodeA, nodeB, probesAB[], probesBA[], targetsAB[], targetsBA[] }
+  const bbByKey = {};
+  const collectBlackbox = (data, module) => {
+    if (!data?.instances?.length) return;
+    const seen = new Set();
+    data.instances.forEach(inst => {
+      const targetRaw = inst.labels[bbDestLabel] || '';
+      if (!targetRaw) return;
+
+      // Source resolution
+      let srcId = '__prometheus__', srcName = 'prometheus';
+      if (bbSrcLabel) {
+        const srcRaw  = inst.labels[bbSrcLabel] || '';
+        const srcLast = srcRaw.lastIndexOf(':');
+        const srcHost = srcLast > 0 ? srcRaw.slice(0, srcLast) : srcRaw;
+        const resolved = hostToNodeId[srcRaw] || hostToNodeId[srcHost]
+                      || fuzzyNodeResolve(srcRaw) || fuzzyNodeResolve(srcHost);
+        if (resolved) { srcId = resolved; srcName = srcHost || srcRaw; }
+      }
+
+      const seenKey = `${srcId}:::${targetRaw}`;
+      if (seen.has(seenKey)) return;
+      seen.add(seenKey);
+
+      const lastCol    = targetRaw.lastIndexOf(':');
+      const targetHost = lastCol > 0 ? targetRaw.slice(0, lastCol) : targetRaw;
+      const aliasNode  = bbDestAliases[targetRaw] || bbDestAliases[targetHost];
+      const destId     = hostToNodeId[targetRaw] || hostToNodeId[targetHost]
+                      || (aliasNode ? hostToNodeId[aliasNode] : null)
+                      || fuzzyNodeResolve(targetRaw) || fuzzyNodeResolve(targetHost);
+      if (!destId) return;
+
+      // Unordered key: (A,B) and (B,A) -> same entry
+      const [idA, idB] = [srcId, destId].sort();
+      const groupKey   = `${idA}:::${idB}`;
+      const fromA      = srcId === idA;
+
+      if (!bbByKey[groupKey]) bbByKey[groupKey] = {
+        nodeA: idA, nodeB: idB,
+        probesAB: [], probesBA: [],
+        targetsAB: [], targetsBA: [],
+      };
+      const e = bbByKey[groupKey];
+      const probeList  = fromA ? e.probesAB  : e.probesBA;
+      const targetList = fromA ? e.targetsAB : e.targetsBA;
+      if (!targetList.includes(targetRaw)) targetList.push(targetRaw);
+      probeList.push({ module, probeUp: parseFloat(inst.value) === 1, target: targetRaw });
+    });
+  };
+
+  collectBlackbox(blackboxData,    'icmp');
+  collectBlackbox(blackboxSshData, 'ssh_banner');
+
+  // Helpers reused in the render loop
+  const bbNodeName = (nodeId) => {
+    const inst = mergedTopoToInstance[nodeId] ?? (nodeId.startsWith('__srv__') ? nodeId.slice(7) : null);
+    return (inst ? (hostMetrics[inst]?.hostname || inst.split(':')[0]) : null)
+        || nodes.find(n => n.id === nodeId)?.label
+        || nodeId;
+  };
+  const bbNodeInst = (nodeId) =>
+    mergedTopoToInstance[nodeId] ?? (nodeId.startsWith('__srv__') ? nodeId.slice(7) : null);
+  const bbCandidates = (nodeId, inst) => [...new Set([
+    nodes.find(n => n.id === nodeId)?.label,
+    inst ? hostMetrics[inst]?.hostname : null,
+    inst ? inst.split(':')[0] : null,
+  ].filter(Boolean))];
+  const bbFindIfaces = (inst, cands) => {
+    if (!inst || !netMetrics[inst]) return [];
+    const result = [];
+    Object.keys(netMetrics[inst]).forEach(iface => {
+      for (const cand of cands) {
+        if (iface === cand || (iface.startsWith(cand) && '-_.'.includes(iface[cand.length]))) {
+          result.push(iface); break;
+        }
+      }
+    });
+    return result;
+  };
+  const bbFmtIface = (ifaceName, data) => {
+    const ratio = Math.max(data.rx ?? 0, data.tx ?? 0) / DEFAULT_CAP;
+    const c     = ratio >= thresholds.network.red    ? '#f04f4f'
+              : ratio >= thresholds.network.orange ? '#e0972a' : '#c9d1e8';
+    return `<span style="color:${c}">━</span>&nbsp;` +
+           `<b style="color:#7e8aaa">${esc(ifaceName)}</b>&nbsp;&nbsp;` +
+           `<span style="color:#7e8aaa">↓</span> ${formatBytesPerSec(data.rx)}&nbsp;&nbsp;` +
+           `<span style="color:#7e8aaa">↑</span> ${formatBytesPerSec(data.tx)}`;
+  };
+
+  Object.entries(bbByKey).forEach(([key, { nodeA, nodeB, probesAB, probesBA, targetsAB, targetsBA }]) => {
+    const allProbes  = [...probesAB, ...probesBA];
+    const allUp      = allProbes.every(p => p.probeUp);
+    const bidir      = probesAB.length > 0 && probesBA.length > 0;
+    const edgeColor  = allUp ? 'rgba(45,186,110,.7)' : '#f04f4f';
+    const nameA      = esc(bbNodeName(nodeA));
+    const nameB      = esc(bbNodeName(nodeB));
+    if (!allUp) {
+      const failMods = [...new Set(allProbes.filter(p => !p.probeUp).map(p => p.module))];
+      issues.push({ label: `${bbNodeName(nodeA)} ↔ ${bbNodeName(nodeB)}`, severity: 'red', reason: `probe ${failMods.join('+')} down` });
+    }
+
+    // -- Tooltip probes ------------------------------------------
+    const fmtProbeDir = (probes, targets, label) => {
+      if (!probes.length) return [];
+      const rows = [];
+      if (label) rows.push(`<span style="color:#7e8aaa">${label}</span>`);
+      if (targets.length > 1)
+        rows.push(`<span style="color:#7e8aaa">targets:</span> <b style="color:#c9d1e8">${targets.map(esc).join(', ')}</b>`);
+      else if (targets.length === 1)
+        rows.push(`<span style="color:#7e8aaa">target:</span> <b style="color:#c9d1e8">${esc(targets[0])}</b>`);
+      probes.forEach(p => {
+        const c   = p.probeUp ? '#2dba6e' : '#f04f4f';
+        const tgt = targets.length > 1 ? `<span style="color:#7e8aaa"> (${esc(p.target)})</span>` : '';
+        rows.push(`<span style="color:#7e8aaa">${esc(p.module)}:</span> <b style="color:${c}">${p.probeUp ? 'UP' : 'DOWN'}</b>${tgt}`);
+      });
+      return rows;
+    };
+
+    const tipRows = [`<b style="color:#00cfff">blackbox probe</b>`];
+    if (bidir) {
+      tipRows.push(...fmtProbeDir(probesAB, targetsAB, `${nameA} → ${nameB}`));
+      tipRows.push('<span style="color:#2a3354">╌╌╌╌╌╌╌╌╌╌╌</span>');
+      tipRows.push(...fmtProbeDir(probesBA, targetsBA, `${nameB} → ${nameA}`));
+    } else if (probesAB.length) {
+      if (bbSrcLabel) tipRows.push(`<span style="color:#7e8aaa">source:</span> <b style="color:#c9d1e8">${nameA}</b>`);
+      tipRows.push(...fmtProbeDir(probesAB, targetsAB, null));
+    } else {
+      if (bbSrcLabel) tipRows.push(`<span style="color:#7e8aaa">source:</span> <b style="color:#c9d1e8">${nameB}</b>`);
+      tipRows.push(...fmtProbeDir(probesBA, targetsBA, null));
+    }
+
+    // -- Cross interface metrics ---------------------------------
+    const instA = bbNodeInst(nodeA);
+    const instB = bbNodeInst(nodeB);
+    const candsA = bbCandidates(nodeA, instA);
+    const candsB = bbCandidates(nodeB, instB);
+    const ifacesOnB = bbFindIfaces(instB, candsA); // ifaces named after A on host B
+    const ifacesOnA = bbFindIfaces(instA, candsB); // ifaces named after B on host A
+    if (ifacesOnA.length || ifacesOnB.length) {
+      tipRows.push('<span style="color:#2a3354">╌╌╌╌╌╌╌╌╌╌╌</span>');
+      if (ifacesOnA.length) {
+        tipRows.push(`<b style="color:#c9d1e8">${nameA}</b>`);
+        ifacesOnA.forEach(iface => tipRows.push(bbFmtIface(iface, netMetrics[instA][iface])));
+      }
+      if (ifacesOnB.length) {
+        if (ifacesOnA.length) tipRows.push('<span style="color:#2a3354">╌╌╌╌╌╌╌╌╌╌╌</span>');
+        tipRows.push(`<b style="color:#c9d1e8">${nameB}</b>`);
+        ifacesOnB.forEach(iface => tipRows.push(bbFmtIface(iface, netMetrics[instB][iface])));
+      }
+    }
+
+    const arrowScale = 0.4;
+    const arrows = bidir
+      ? { from: { enabled: true, scaleFactor: arrowScale }, to: { enabled: true, scaleFactor: arrowScale } }
+      : probesAB.length
+        ? { to:   { enabled: true, scaleFactor: arrowScale } }
+        : { from: { enabled: true, scaleFactor: arrowScale } };
+
+    edges.push({
+      id: `__bb__${key}`,
+      from: nodeA,
+      to:   nodeB,
+      width: 1.5,
+      dashes: !allUp ? [4, 3] : false,
+      _bbProbes: allProbes,
+      _blackboxUp: allUp,
+      _bbInstance: targetsAB[0] || targetsBA[0],
+      color: { color: edgeColor, highlight: edgeColor, hover: edgeColor },
+      smooth: { type: 'curvedCCW', roundness: 0.3 },
+      arrows,
+      title: tipEl(tipRows.join('<br>')),
+    });
+  });
+
+  if (edges.some(e => e._bbProbes && e.from === '__prometheus__') && !nodes.find(n => n.id === '__prometheus__')) {
+    nodes.push({
+      id: '__prometheus__',
+      label: 'prometheus',
+      shape: 'image',
+      image: ICON.prometheus('#00cfff'),
+      size: 22,
+      font: { color: '#00cfff', size: 10, face: 'JetBrains Mono' },
+      title: tipEl('<b style="color:#00cfff">Prometheus</b><br><span style="color:#7e8aaa">blackbox exporter</span>'),
+    });
+  }
+
+  // -- Phase 8: Frigate cameras ---------------------------------
+  if (frigateData?.instances) {
+    const camParents = Object.fromEntries((topo.cameras || []).map(c => [c.name, c.parent]).filter(([n, p]) => n && p));
+    frigateData.instances.forEach(inst => {
+      const camName = inst.labels.camera_name || '';
+      if (!camName) return;
+      const fps      = parseFloat(inst.value);
+      const isOnline = fps > 0;
+      const color    = isOnline ? '#2dba6e' : '#f04f4f';
+      const camId    = `__cam__${camName}`;
+
+      // Parent : override config > label parent > fallback
+      const parentRaw  = camParents[camName] || inst.labels.parent || '';
+      const lastCol    = parentRaw.lastIndexOf(':');
+      const parentHost = lastCol > 0 ? parentRaw.slice(0, lastCol) : parentRaw;
+      const gwId = (parentRaw ? (hostToNodeId[parentRaw] || hostToNodeId[parentHost]) : null) || fallback;
+
+      // Zone membership (bulle visuelle uniquement)
+      if (inst.labels.zone && zoneById[inst.labels.zone]) {
+        let zId = inst.labels.zone;
+        const visited = new Set();
+        while (zId && zoneIds.has(zId) && !visited.has(zId)) {
+          visited.add(zId);
+          if (!zoneMembers[zId]) zoneMembers[zId] = [];
+          zoneMembers[zId].push(camId);
+          zId = zoneParentMap[zId];
+        }
+      }
+
+      const short    = camName.length > 16 ? camName.slice(0, 14) + '…' : camName;
+      const tipLines = [
+        `<b style="color:#4fc3f7">${esc(camName)}</b>`,
+        `<span style="color:#7e8aaa">FPS:</span> <b style="color:${color}">${isOnline ? fps.toFixed(1) : '0 - offline'}</b>`,
+        frigateBaseUrl ? `<span style="color:#3d4560">↗ click to open</span>` : null,
+      ].filter(Boolean).join('<br>');
+
+      nodes.push({
+        id: camId, label: short, shape: 'image',
+        image: ICON.camera(color), size: 17,
+        font: { color, size: 9, face: 'JetBrains Mono' },
+        title: tipEl(tipLines),
+      });
+
+      if (gwId) edges.push({
+        from: gwId, to: camId, width: 1,
+        color: { color: '#2a3354', highlight: '#2a3354', hover: '#2a3354' },
+        smooth: { type: 'curvedCW', roundness: 0.1 },
+      });
+    });
+  }
+
+  // Deduplicate nodes -- collect warnings without blocking the render
+  const seenIds = new Set();
+  const uniqueNodes = nodes.filter(n => {
+    if (seenIds.has(n.id)) { warnings.push(`Duplicate node id ignored: ${n.id}`); return false; }
+    seenIds.add(n.id);
+    return true;
+  });
+
+  // Nodes without a structural connection (excluding blackbox edges and invisible zone edges)
+  const connectedIds = new Set();
+  edges.filter(e => !e._zoneEdge && !e._bbProbes).forEach(e => {
+    connectedIds.add(e.from);
+    connectedIds.add(e.to);
+  });
+  Object.values(zoneMembers).forEach(members => members.forEach(id => connectedIds.add(id)));
+  const orphanNodes = uniqueNodes.filter(n => !connectedIds.has(n.id) && n.id !== '__prometheus__');
+
+  const instanceToNodeId = {};
+  Object.entries(mergedTopoToInstance).forEach(([topoId, inst]) => {
+    instanceToNodeId[inst] = topoId;
+    const h = inst.lastIndexOf(':') > 0 ? inst.slice(0, inst.lastIndexOf(':')) : inst;
+    if (!instanceToNodeId[h]) instanceToNodeId[h] = topoId;
+  });
+  instances.forEach(inst => {
+    const instVal = inst.labels[instLabel] || '';
+    if (!instVal || instanceToNodeId[instVal]) return;
+    const srvId = `__srv__${instVal}`;
+    instanceToNodeId[instVal] = srvId;
+    const h = instVal.lastIndexOf(':') > 0 ? instVal.slice(0, instVal.lastIndexOf(':')) : instVal;
+    if (!instanceToNodeId[h]) instanceToNodeId[h] = srvId;
+  });
+
+  return { nodes: uniqueNodes, edges, stats: { total: instances.length, up, down }, zones: zonesDisplay, zoneMembers, blinkNodes, warnings, orphanNodes, issues, instanceToNodeId };
+}
+
+// -- VIS NETWORK ----------------------------------------------
+let network = null;
+let isFirst        = true;
+let savedPositions = {};
+let blackboxEnabled         = false;
+let blackboxHttpNodeLabel   = 'upstream';
+let libvirtEnabled       = false;
+let frigateEnabled       = false;
+let frigateConfigData    = null;
+let frigateBaseUrl       = '';
+let libvirtInstanceLabel = 'instance';
+let libvirtMetric        = 'libvirt_domain_info_state';
+let rubberBand       = null; // { startX, startY, endX, endY } coords DOM
+let dblPending       = null; // { startX, startY } waiting for a drag after a double-click
+let lastDownTime     = 0;
+let lastDownPos      = null;
+let skipNextClick    = false;
+let rubberBandInited = false;
+let selectMode       = false;
+let zoneRenderData      = { zones: [], zoneMembers: {} };
+let currentEdgesDataset = null;
+let currentNodesDataset = null;
+let _nodeClickTimer     = null;
+let zonesVisible         = true;
+let tunnelsVisible       = true;
+let blackboxUpHidden     = true;
+let libvirtShutOffHidden = false;
+let libvirtUpHidden      = false;
+let blackboxSshUpHidden  = true;
+let legendVisible     = true;
+let lastGraphData        = null;
+let lastAlerts           = [];
+let lastInstanceToNodeId = {};
+let blinkingNodes    = new Set();
+let alertBlinkNodes  = new Map(); // nodeId -> color
+let alertBlinkRafId  = null;
+
+function alertBlinkLoop() {
+  const canvas = $('alertDotCanvas');
+  if (!canvas || !network || alertBlinkNodes.size === 0) {
+    alertBlinkRafId = null;
+    if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+  const container = $('netContainer');
+  const w = container.clientWidth, h = container.clientHeight;
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  if (Math.floor(Date.now() / 500) % 2 === 0) {
+    const scale = network.getScale();
+    alertBlinkNodes.forEach((color, id) => {
+      const cp = network.getPositions([id])[id];
+      if (!cp) return;
+      const dp = network.canvasToDOM(cp);
+      const sz  = (network.body.nodes[id]?.options?.size ?? 20) * scale;
+      const dot = Math.max(2, sz * 0.22);
+      ctx.save();
+      ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = dot * 1.5;
+      ctx.beginPath();
+      ctx.arc(dp.x + sz * 0.7, dp.y - sz * 0.7, dot, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+  alertBlinkRafId = requestAnimationFrame(alertBlinkLoop);
+}
+function startAlertBlink() { if (!alertBlinkRafId) alertBlinkLoop(); }
+function stopAlertBlink()  {
+  if (alertBlinkRafId) { cancelAnimationFrame(alertBlinkRafId); alertBlinkRafId = null; }
+  const canvas = $('alertDotCanvas');
+  if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
+let focusedNodeId  = null;
+let blinkAnimId    = null;
+let searchBlink    = null; // { nodeId, startTime }
+let searchBlinkId  = null;
+
+function blinkLoop() {
+  if (!network || blinkingNodes.size === 0) { blinkAnimId = null; return; }
+  network.redraw();
+  blinkAnimId = requestAnimationFrame(blinkLoop);
+}
+function startBlink() { if (!blinkAnimId) blinkLoop(); }
+function stopBlink()  {
+  if (blinkAnimId) { cancelAnimationFrame(blinkAnimId); blinkAnimId = null; }
+}
+
+function searchBlinkLoop() {
+  if (!network || !searchBlink) { searchBlinkId = null; return; }
+  if (Date.now() - searchBlink.startTime >= 1500) {
+    searchBlink = null; network.redraw(); searchBlinkId = null; return;
+  }
+  network.redraw();
+  searchBlinkId = requestAnimationFrame(searchBlinkLoop);
+}
+
+function openCamModal(camName) {
+  const url = `${frigateBaseUrl}/#${camName}`;
+  const w = Math.min(1280, screen.availWidth  * 0.92);
+  const h = Math.min(820,  screen.availHeight * 0.88);
+  const left = Math.round((screen.availWidth  - w) / 2 + (screen.availLeft || 0));
+  const top  = Math.round((screen.availHeight - h) / 2 + (screen.availTop  || 0));
+  window.open(url, `cam_${camName}`, `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`);
+}
+
+function openNodeModal(nodeId) {
+  const node = currentNodesDataset?.get(nodeId);
+  if (!node) return;
+  const modal = $('nodeTipModal');
+  $('ntmTitle').textContent = (node.label || nodeId).replace(/\n/g, ' ');
+  const body = $('ntmBody');
+  body.innerHTML = '';
+  const content = node._fullTitle || node.title;
+  if (content instanceof Element) {
+    body.appendChild(content.cloneNode(true));
+  } else {
+    body.textContent = node.label || nodeId;
+  }
+  modal.showModal();
+}
+
+function searchNode(query) {
+  if (!network || !query.trim()) return;
+  const q = query.trim().toLowerCase();
+  const all = network.body.data.nodes.get();
+  let hit = all.find(n => (n.label || '').toLowerCase() === q);
+  if (!hit) hit = all.find(n => (n.label || '').replace('…', '').toLowerCase().startsWith(q));
+  if (!hit) hit = all.find(n => (n.label || '').toLowerCase().includes(q));
+  if (!hit) hit = all.find(n => {
+    const id = n.id.startsWith('__srv__') ? n.id.slice(7) : n.id;
+    return id.toLowerCase().includes(q);
+  });
+  if (!hit) return;
+  network.focus(hit.id, { scale: 1.5, animation: { duration: 700, easingFunction: 'easeOutQuart' } });
+  searchBlink = { nodeId: hit.id, startTime: Date.now() };
+  if (!searchBlinkId) searchBlinkLoop();
+}
+
+const ZONE_FILLS   = ['rgba(74,138,223,.10)','rgba(155,109,255,.10)','rgba(45,186,110,.10)','rgba(224,151,42,.10)','rgba(0,207,255,.10)'];
+const ZONE_STROKES = ['rgba(74,138,223,.50)','rgba(155,109,255,.50)','rgba(45,186,110,.50)','rgba(224,151,42,.50)','rgba(0,207,255,.50)'];
+
+// Minimal circle with the parent on the edge and every member inside.
+// Center = parent + dir * R  (dir: parent -> centroid of the members).
+// Binary search on R: constraint |C - Mi| <= R - pad for each member.
+function zoneBubbleCircle(memberPts, parentPt, pad) {
+  const gx = memberPts.reduce((s, p) => s + p.x, 0) / memberPts.length;
+  const gy = memberPts.reduce((s, p) => s + p.y, 0) / memberPts.length;
+
+  if (!parentPt || Math.hypot(gx - parentPt.x, gy - parentPt.y) < 1) {
+    const r = Math.max(...memberPts.map(p => Math.hypot(p.x - gx, p.y - gy))) + pad;
+    return { cx: gx, cy: gy, r };
+  }
+
+  const dx = gx - parentPt.x, dy = gy - parentPt.y;
+  const d  = Math.hypot(dx, dy);
+  const dirX = dx / d, dirY = dy / d;
+
+  const feasible = R => {
+    const cx = parentPt.x + dirX * R, cy = parentPt.y + dirY * R;
+    return memberPts.every(p => Math.hypot(p.x - cx, p.y - cy) <= R - pad);
+  };
+
+  let lo = pad;
+  let hi = memberPts.reduce((m, p) =>
+    Math.max(m, Math.hypot(p.x - parentPt.x, p.y - parentPt.y) + pad * 2), pad * 2);
+  for (let i = 0; i < 52; i++) { const mid = (lo + hi) / 2; feasible(mid) ? hi = mid : lo = mid; }
+
+  return { cx: parentPt.x + dirX * hi, cy: parentPt.y + dirY * hi, r: hi };
+}
+
+function drawZoneBubbles(ctx, net, zones, zoneMembers) {
+  zones.forEach((z, i) => {
+    const members = zoneMembers[z.id];
+    if (!members || members.length === 0) return;
+
+    const pos       = net.getPositions(z.parent ? [...members, z.parent] : members);
+    const memberPts = members.map(id => pos[id]).filter(Boolean);
+    if (memberPts.length === 0) return;
+    const parentPt  = z.parent ? (pos[z.parent] ?? null) : null;
+
+    const pad    = 42;
+    const { cx, cy, r } = zoneBubbleCircle(memberPts, parentPt, pad);
+    const fill   = ZONE_FILLS[i % ZONE_FILLS.length];
+    const stroke = ZONE_STROKES[i % ZONE_STROKES.length];
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = stroke;
+    ctx.font = 'bold 11px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(z.label || z.id, cx, cy - r + 16);
+    ctx.textAlign = 'left';
+  });
+}
+
+function separateZoneBubbles(net, zones, zoneMembers) {
+  const INTER_ZONE_GAP = 30;
+  const MEMBER_PAD     = 42; // must match the pad used in drawZoneBubbles
+  const MAX_ITERS      = 120;
+
+  const circles = zones.map(z => {
+    const members = zoneMembers[z.id];
+    if (!members?.length) return null;
+    const pos = net.getPositions(members);
+    const pts = members.map(id => pos[id]).filter(Boolean);
+    if (!pts.length) return null;
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    const r  = Math.max(0, ...pts.map(p => Math.hypot(p.x - cx, p.y - cy))) + MEMBER_PAD;
+    return { zoneId: z.id, cx, cy, r, origCx: cx, origCy: cy };
+  }).filter(Boolean);
+
+  if (circles.length < 2) return;
+
+  for (let iter = 0; iter < MAX_ITERS; iter++) {
+    let moved = false;
+    for (let i = 0; i < circles.length; i++) {
+      for (let j = i + 1; j < circles.length; j++) {
+        const a = circles[i], b = circles[j];
+        const dx = b.cx - a.cx, dy = b.cy - a.cy;
+        const dist = Math.hypot(dx, dy);
+        const minDist = a.r + b.r + INTER_ZONE_GAP;
+        if (dist >= minDist) continue;
+        const push = (minDist - dist) / 2 + 0.01;
+        const nx = dist > 0.01 ? dx / dist : 1;
+        const ny = dist > 0.01 ? dy / dist : 0;
+        a.cx -= nx * push; a.cy -= ny * push;
+        b.cx += nx * push; b.cy += ny * push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+
+  // Move the members of each zone by the separation delta
+  const allZoneMembers = new Set(circles.flatMap(c => zoneMembers[c.zoneId] ?? []));
+  const movedNodes = new Set();
+  for (const circle of circles) {
+    const dx = circle.cx - circle.origCx;
+    const dy = circle.cy - circle.origCy;
+    if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) continue;
+    for (const nodeId of zoneMembers[circle.zoneId] ?? []) {
+      if (movedNodes.has(nodeId)) continue;
+      movedNodes.add(nodeId);
+      const pos = net.getPositions([nodeId])[nodeId];
+      if (pos) net.moveNode(nodeId, pos.x + dx, pos.y + dy);
+    }
+  }
+
+  if (movedNodes.size > 0)
+    Object.assign(savedPositions, net.getPositions([...movedNodes]));
+
+  // Push out-of-zone nodes outside the bubbles
+  const NODE_GAP = 15;
+  const freshPos = net.getPositions();
+  const nonZoneIds = Object.keys(freshPos).filter(id =>
+    !allZoneMembers.has(id) && !id.startsWith('__zone__')
+  );
+  for (const nodeId of nonZoneIds) {
+    const p = freshPos[nodeId];
+    if (!p) continue;
+    let { x, y } = p;
+    for (let iter = 0; iter < 50; iter++) {
+      let inside = false;
+      for (const circle of circles) {
+        const dx = x - circle.cx, dy = y - circle.cy;
+        const dist = Math.hypot(dx, dy);
+        const minDist = circle.r + NODE_GAP;
+        if (dist < minDist) {
+          const nx = dist > 0.01 ? dx / dist : 1;
+          const ny = dist > 0.01 ? dy / dist : 0;
+          x = circle.cx + nx * minDist;
+          y = circle.cy + ny * minDist;
+          inside = true;
+        }
+      }
+      if (!inside) break;
+    }
+    if (Math.abs(x - p.x) > 0.1 || Math.abs(y - p.y) > 0.1) {
+      net.moveNode(nodeId, x, y);
+      savedPositions[nodeId] = { x, y };
+    }
+  }
+}
+
+function renderVisNetwork(nodes, edges, zones = [], zoneMembers = {}) {
+  overlay('hidden');
+  const container = $('netContainer');
+  const hadSavedPositions = Object.keys(savedPositions).length > 0;
+
+  zoneRenderData.zones       = zones;
+  zoneRenderData.zoneMembers = zoneMembers;
+
+  // Save the current positions before destroying
+  if (network) {
+    Object.assign(savedPositions, network.getPositions());
+  }
+
+  // Inject the saved positions into the known nodes
+  const nodesWithPos = nodes.map(n => {
+    const p = savedPositions[n.id];
+    return p ? { ...n, x: p.x, y: p.y, physics: false } : n;
+  });
+
+  currentEdgesDataset = new vis.DataSet(edges);
+  currentNodesDataset = new vis.DataSet(nodesWithPos);
+  const data = { nodes: currentNodesDataset, edges: currentEdgesDataset };
+
+  const options = {
+    nodes: { borderWidth: 0, shadow: false, chosen: false },
+    edges: { arrows: { to: false }, selectionWidth: 0, hoverWidth: 0.6 },
+    physics: {
+      enabled: true,
+      solver: 'forceAtlas2Based',
+      forceAtlas2Based: { gravitationalConstant: -65, centralGravity: 0.004, springLength: 130, springConstant: 0.08, damping: 0.42, avoidOverlap: 0.6 },
+      stabilization: { enabled: true, iterations: 160, updateInterval: 20, fit: false },
+    },
+    interaction: { hover: true, tooltipDelay: 100, zoomView: true, dragView: true, dragNodes: true, navigationButtons: false, keyboard: false, multiselect: true },
+    layout: { randomSeed: 42 },
+  };
+
+  const prevPos   = network ? network.getViewPosition() : null;
+  const prevScale = network ? network.getScale() : null;
+
+  // Define onNetworkReady before creating the network so it can be registered
+  // immediately after construction (vis.js may fire 'stabilized' synchronously
+  // when all nodes have physics:false, before late-registered listeners would catch it).
+  let _networkReadyDone = false;
+  const onNetworkReady = () => {
+    if (_networkReadyDone) return;
+    _networkReadyDone = true;
+
+    isFirst = false;
+    network.setOptions({ physics: { enabled: false } });
+
+    if (!hadSavedPositions && zones.length >= 2)
+      separateZoneBubbles(network, zones, zoneMembers);
+
+    Object.assign(savedPositions, network.getPositions());
+
+    if (prevPos) {
+      network.moveTo({ position: prevPos, scale: prevScale, animation: false });
+      requestAnimationFrame(() => network?.moveTo({ position: prevPos, scale: prevScale, animation: false }));
+    } else {
+      const doFit = () => network?.fit({ animation: { duration: 650, easingFunction: 'easeOutQuart' } });
+      doFit();
+      network.once('resize', () => requestAnimationFrame(doFit));
+    }
+  };
+
+  if (network) network.destroy();
+  network = new vis.Network(container, data, options);
+
+  // Register immediately after construction to catch synchronous event emission
+  network.once('stabilizationIterationsDone', onNetworkReady);
+  network.once('stabilized',                  onNetworkReady);
+
+  // Fallback: when all nodes are pre-positioned (physics:false), vis.js may emit
+  // 'stabilized' synchronously during construction and we'd miss it above.
+  // Schedule a guaranteed call after one frame; the _networkReadyDone guard prevents double execution.
+  const allFixed = nodesWithPos.every(n => n.physics === false);
+  if (allFixed) requestAnimationFrame(onNetworkReady);
+
+  network.on('beforeDrawing', ctx => drawZoneBubbles(ctx, network, zoneRenderData.zones, zoneRenderData.zoneMembers));
+  network.on('doubleClick', params => {
+    clearTimeout(_nodeClickTimer);
+    _nodeClickTimer = null;
+    if (params.nodes.length > 0) openNodeModal(params.nodes[0]);
+    /* else: handled by mousedown -- prevents the vis.js zoom */
+  });
+
+  network.on('afterDrawing', ctx => {
+    // Search highlight blink (cyan, 3x)
+    if (searchBlink) {
+      const elapsed = Date.now() - searchBlink.startTime;
+      if (Math.floor(elapsed / 250) % 2 === 0) {
+        const p = network.getPositions([searchBlink.nodeId])[searchBlink.nodeId];
+        if (p) {
+          ctx.save();
+          ctx.strokeStyle = '#00cfff';
+          ctx.lineWidth = 3;
+          ctx.shadowColor = '#00cfff';
+          ctx.shadowBlur = 16;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 32, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+    // Cyan outline on the selected nodes
+    const selectedIds = network.getSelectedNodes();
+    if (selectedIds.length > 0) {
+      const selPos = network.getPositions(selectedIds);
+      const s = network.getScale();
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0,207,255,0.9)';
+      ctx.shadowColor = 'rgba(0,207,255,0.45)';
+      ctx.shadowBlur  = 10 / s;
+      ctx.lineWidth   = 2 / s;
+      selectedIds.forEach(id => {
+        const pos = selPos[id];
+        if (!pos) return;
+        const r = (network.body.nodes[id]?.options?.size ?? 20) + 5;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    // Rubber band selection rectangle
+    if (rubberBand) {
+      const start = network.DOMtoCanvas({ x: rubberBand.startX, y: rubberBand.startY });
+      const end   = network.DOMtoCanvas({ x: rubberBand.endX,   y: rubberBand.endY });
+      const s     = network.getScale();
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0,207,255,0.8)';
+      ctx.fillStyle   = 'rgba(0,207,255,0.07)';
+      ctx.lineWidth   = 1.5 / s;
+      ctx.setLineDash([5 / s, 3 / s]);
+      ctx.beginPath();
+      ctx.rect(Math.min(start.x, end.x), Math.min(start.y, end.y), Math.abs(end.x - start.x), Math.abs(end.y - start.y));
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // Usage-alert blink (red, permanent)
+    if (blinkingNodes.size === 0) return;
+    const on = Math.floor(Date.now() / 400) % 2 === 0;
+    if (!on) return;
+    const positions = network.getPositions([...blinkingNodes]);
+    ctx.save();
+    ctx.strokeStyle = '#f04f4f';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#f04f4f';
+    ctx.shadowBlur = 8;
+    blinkingNodes.forEach(id => {
+      const pos = positions[id];
+      if (!pos) return;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 28, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    ctx.restore();
+  });
+
+  // Rubber band listeners -- added only once on the DOM container
+  if (!rubberBandInited) {
+    rubberBandInited = true;
+
+    container.addEventListener('mousedown', e => {
+      if (!network || e.button !== 0) return;
+      const rect    = container.getBoundingClientRect();
+      const domPos  = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const now     = Date.now();
+      const onNode  = network.getNodeAt(domPos) !== undefined;
+
+      // Double-click detection on the empty background
+      const isDbl = !onNode &&
+        (now - lastDownTime < 400) &&
+        lastDownPos &&
+        Math.hypot(domPos.x - lastDownPos.x, domPos.y - lastDownPos.y) < 10;
+
+      lastDownTime = now;
+      lastDownPos  = domPos;
+
+      if (isDbl) {
+        // Prepare rubber band, disable pan + zoom to avoid the vis.js double-click zoom
+        dblPending = { startX: domPos.x, startY: domPos.y };
+        network.setOptions({ interaction: { dragView: false, zoomView: false } });
+        return;
+      }
+
+      // Selection mode button: rubber band on a single click on the empty background
+      if (selectMode && !onNode) {
+        rubberBand = { startX: domPos.x, startY: domPos.y, endX: domPos.x, endY: domPos.y };
+      }
+    });
+
+    document.addEventListener('mousemove', e => {
+      const rect = container.getBoundingClientRect();
+      const curX = e.clientX - rect.left;
+      const curY = e.clientY - rect.top;
+
+      // Trigger the rubber band once the movement threshold from the double-click is passed
+      if (dblPending) {
+        if (Math.hypot(curX - dblPending.startX, curY - dblPending.startY) > 5) {
+          rubberBand = { startX: dblPending.startX, startY: dblPending.startY, endX: curX, endY: curY };
+          dblPending = null;
+        }
+        return;
+      }
+
+      if (!rubberBand || !network) return;
+      rubberBand.endX = curX;
+      rubberBand.endY = curY;
+      network.redraw();
+    });
+
+    document.addEventListener('mouseup', e => {
+      // Double-click without drag: cancel cleanly
+      if (dblPending) {
+        dblPending = null;
+        network?.setOptions({ interaction: { dragView: !selectMode, zoomView: true } });
+        return;
+      }
+
+      if (!rubberBand || !network) return;
+      const rect = container.getBoundingClientRect();
+      rubberBand.endX = e.clientX - rect.left;
+      rubberBand.endY = e.clientY - rect.top;
+      const dx = Math.abs(rubberBand.endX - rubberBand.startX);
+      const dy = Math.abs(rubberBand.endY - rubberBand.startY);
+      if (dx > 5 || dy > 5) {
+        const x1 = Math.min(rubberBand.startX, rubberBand.endX);
+        const x2 = Math.max(rubberBand.startX, rubberBand.endX);
+        const y1 = Math.min(rubberBand.startY, rubberBand.endY);
+        const y2 = Math.max(rubberBand.startY, rubberBand.endY);
+        const allPos = network.getPositions();
+        const selected = Object.keys(allPos).filter(id => {
+          const p = network.canvasToDOM(allPos[id]);
+          return p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
+        });
+        if (selected.length > 0) { network.selectNodes(selected); skipNextClick = true; }
+      }
+      rubberBand = null;
+      // Restore pan/zoom (the selectMode button keeps dragView: false while active)
+      network.setOptions({ interaction: { dragView: !selectMode, zoomView: true } });
+      network.redraw();
+    });
+  }
+  if (selectMode) network.setOptions({ interaction: { dragView: false } });
+
+  network.on('click', params => {
+    if (skipNextClick) { skipNextClick = false; return; }
+    const base = promUrl.replace(/\/$/, '');
+
+    // Click on a node -> toggle focus (or open the camera if a URL is configured)
+    if (params.nodes.length > 0) {
+      if (params.event?.srcEvent?.ctrlKey || params.event?.srcEvent?.metaKey) return;
+      const nodeId = params.nodes[0];
+      if (nodeId.startsWith('__cam__') && frigateBaseUrl) {
+        openCamModal(nodeId.slice(7));
+        return;
+      }
+      // Delay so a double-click can cancel before the focus animation runs
+      clearTimeout(_nodeClickTimer);
+      _nodeClickTimer = setTimeout(() => {
+        _nodeClickTimer = null;
+        const newFocusId = focusedNodeId === nodeId ? null : nodeId;
+        focusedNodeId = newFocusId;
+        applyRender(newFocusId);
+      }, 220);
+      return;
+    }
+
+    // Click on the empty background -> clear focus
+    if (params.edges.length === 0) {
+      if (focusedNodeId !== null) { focusedNodeId = null; applyRender(); }
+      return;
+    }
+
+    // Click on a visible edge (intra-zone edges have width=0)
+    if (params.edges.length > 0) {
+      const edge = currentEdgesDataset?.get(params.edges[0]);
+      if (!edge || edge.width === 0) return;
+
+      // Lien blackbox (ICMP / SSH banner)
+      if (edge._bbProbes) {
+        const q = `probe_success{instance="${edge._bbInstance}"}`;
+        window.open(`${base}/graph?g0.expr=${encodeURIComponent(q)}&g0.tab=1`, '_blank');
+        return;
+      }
+
+      // Tunnel WireGuard
+      if (edge.id?.startsWith('__wg__') && edge._wgInstance && edge._wgIface) {
+        const rx = `rate(node_network_receive_bytes_total{instance="${edge._wgInstance}",device="${edge._wgIface}"}[5m])`;
+        const tx = `rate(node_network_transmit_bytes_total{instance="${edge._wgInstance}",device="${edge._wgIface}"}[5m])`;
+        window.open(`${base}/graph?g0.expr=${encodeURIComponent(rx)}&g0.tab=0&g1.expr=${encodeURIComponent(tx)}&g1.tab=0`, '_blank');
+        return;
+      }
+
+      // The Prometheus instance is on the __srv__ node (from or to)
+      const srvEnd = edge.from.startsWith('__srv__') ? edge.from : edge.to.startsWith('__srv__') ? edge.to : null;
+      if (!srvEnd) return;
+      const instance = srvEnd.slice(7);
+      const rx = `rate(node_network_receive_bytes_total{instance="${instance}",device!~"lo|veth.*|vnet.*|docker.*|br-.*|virbr.*"}[5m])`;
+      const tx = `rate(node_network_transmit_bytes_total{instance="${instance}",device!~"lo|veth.*|vnet.*|docker.*|br-.*|virbr.*"}[5m])`;
+      const url = `${base}/graph`
+        + `?g0.expr=${encodeURIComponent(rx)}&g0.tab=0`
+        + `&g1.expr=${encodeURIComponent(tx)}&g1.tab=0`;
+      window.open(url, '_blank');
+    }
+  });
+
+}
+
+// -- OVERLAY --------------------------------------------------
+function overlay(mode, msg) {
+  const el = $('netOverlay');
+  if (mode==='hidden') { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.replaceChildren();
+  const icon = document.createElement('div');
+  if (mode==='loading') {
+    icon.className = 'spinner';
+  } else {
+    icon.className = 'overlay-icon';
+    icon.textContent = '◈';
+  }
+  el.appendChild(icon);
+  const text = document.createElement('div');
+  text.textContent = msg || (mode==='loading' ? 'loading…' : '');
+  el.appendChild(text);
+}
+
+// -- CERT MODE: direct queries from the browser ---------------
+function normalizeProm(metric, data) {
+  const rt  = data.data.resultType;
+  const raw = data.data.result;
+  let instances;
+  if (rt === 'scalar' || rt === 'string') {
+    const [ts, val] = raw;
+    instances = [{ labels: {}, value: val, timestamp: parseFloat(ts) }];
+  } else if (rt === 'vector') {
+    instances = raw.map(r => ({ labels: r.metric, value: r.value[1], timestamp: parseFloat(r.value[0]) }));
+  } else {
+    instances = raw.map(r => ({ labels: r.metric, value: r.values, timestamp: null }));
+  }
+  return { metric, result_type: rt, count: instances.length, instances };
+}
+
+async function directQuery(metric) {
+  const url = `${promUrl.replace(/\/$/, '')}/api/v1/query`;
+  const r = await fetch(`${url}?${new URLSearchParams({ query: metric })}`, {
+    credentials: directCredentials ? 'include' : 'omit',
+  });
+  if (!r.ok) throw new Error(`Prometheus HTTP ${r.status}`);
+  const data = await r.json();
+  if (data.status !== 'success') throw new Error(`Prometheus: ${data.error || 'unknown'}`);
+  return normalizeProm(metric, data);
+}
+
+function makePost() {
+  if (authType !== 'cert') {
+    return metric => fetch('/api/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metric, mode: 'instant' }),
+    });
+  }
+  return async metric => {
+    try {
+      const result = await directQuery(metric);
+      return { ok: true, json: () => Promise.resolve(result) };
+    } catch (e) {
+      return { ok: false, json: () => Promise.resolve({ detail: e.message }) };
+    }
+  };
+}
+
+// -- FETCH ----------------------------------------------------
+let refreshTimer = null;
+
+function scheduleRefresh() {
+  clearInterval(refreshTimer);
+  const s = parseInt($('refreshSel').value);
+  if (s > 0) refreshTimer = setInterval(fetchAll, s*1000);
+}
+
+function promBody(metric = 'up{exporter="node"}') {
+  return JSON.stringify({ metric, mode: 'instant' });
+}
+
+function formatBytesPerSec(bps) {
+  if (bps === null || isNaN(bps)) return '—';
+  const abs = Math.abs(bps);
+  if (abs >= 1e9)  return (bps / 1e9).toFixed(2)  + ' GB/s';
+  if (abs >= 1e6)  return (bps / 1e6).toFixed(2)  + ' MB/s';
+  if (abs >= 1e3)  return (bps / 1e3).toFixed(1)  + ' KB/s';
+  return Math.round(bps) + ' B/s';
+}
+
+function formatBytes(b) {
+  if (b == null || isNaN(b)) return '—';
+  if (b >= 1e12) return (b / 1e12).toFixed(1) + ' TB';
+  if (b >= 1e9)  return (b / 1e9).toFixed(1)  + ' GB';
+  if (b >= 1e6)  return (b / 1e6).toFixed(0)  + ' MB';
+  return Math.round(b / 1e3) + ' KB';
+}
+
+function formatUptime(secs) {
+  if (secs == null || isNaN(secs) || secs < 0) return '—';
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (d > 0)  return `${d}d ${h}h`;
+  if (h > 0)  return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function showPromAlerts(alerts) {
+  lastAlerts = alerts || [];
+  const panel = $('promAlertPanel');
+  const firing = lastAlerts.filter(a => a.state === 'firing');
+  if (!firing.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  const sevColor = sev => sev === 'critical' ? '#f04f4f' : sev === 'info' ? '#4a8adf' : '#e0972a';
+  const hasCrit = firing.some(a => (a.labels?.severity || '').toLowerCase() === 'critical');
+  const hasWarn = !hasCrit && firing.some(a => (a.labels?.severity || '').toLowerCase() === 'warning');
+  panel.classList.toggle('orange', hasWarn);
+  panel.classList.toggle('blue',   !hasCrit && !hasWarn);
+  $('promAlertCount').textContent = firing.length;
+  const rows = firing.map(a => {
+    const sev = (a.labels?.severity || '').toLowerCase();
+    const c = sevColor(sev);
+    const name = esc(a.labels?.alertname || 'unknown');
+    const nodeVal = a.labels?.[instanceLabel];
+    const inst = nodeVal ? ' <span style="color:var(--text2)">' + esc(nodeVal) + '</span>' : '';
+    const summary = a.annotations?.summary ? '<div class="prom-alert-summary">' + esc(a.annotations.summary) + '</div>' : '';
+    return '<div class="prom-alert-item"><div class="prom-alert-name" style="color:' + c + '">' + name + inst + '</div>' + summary + '</div>';
+  });
+  $('promAlertList').innerHTML = rows.join('');
+}
+
+function openAlertsPage() {
+  stopAlertBlink();
+  document.querySelector('.main').style.display = 'none';
+  $('alertsPage').style.display = 'flex';
+  renderAlertsPage();
+}
+
+function closeAlertsPage() {
+  $('alertsPage').style.display = 'none';
+  document.querySelector('.main').style.display = 'flex';
+  if (alertBlinkNodes.size > 0) startAlertBlink();
+}
+
+function renderAlertsPage() {
+  const firing = lastAlerts.filter(a => a.state === 'firing');
+  $('apSubtitle').textContent = firing.length
+    ? `${firing.length} alerte${firing.length > 1 ? 's' : ''} active${firing.length > 1 ? 's' : ''}`
+    : '';
+  const body = $('apBody');
+  body.replaceChildren();
+  if (!firing.length) {
+    const empty = document.createElement('div');
+    empty.className = 'ap-empty';
+    empty.textContent = 'No active alert';
+    body.appendChild(empty);
+    return;
+  }
+
+  const sevOrder = { critical: 0, warning: 1, info: 2 };
+
+  // Group by instance (node), keeping worst severity
+  const groupMap = new Map();
+  firing.forEach(a => {
+    const inst = a.labels?.[instanceLabel] || '';
+    const sev  = (a.labels?.severity || 'warning').toLowerCase();
+    if (!groupMap.has(inst)) groupMap.set(inst, { sev, alerts: [] });
+    const g = groupMap.get(inst);
+    if ((sevOrder[sev] ?? 1) < (sevOrder[g.sev] ?? 1)) g.sev = sev;
+    g.alerts.push(a);
+  });
+
+  const groups = [...groupMap.entries()].sort(([ia, ga], [ib, gb]) => {
+    const sa = sevOrder[ga.sev] ?? 1, sb = sevOrder[gb.sev] ?? 1;
+    return sa !== sb ? sa - sb : ia.localeCompare(ib);
+  });
+
+  const makeMeta = (entries, topMargin = '4px') => {
+    const meta = document.createElement('div');
+    meta.className = 'ap-meta';
+    meta.style.marginTop = topMargin;
+    entries.forEach(([k, v]) => {
+      const lbl = document.createElement('span');
+      lbl.className = 'ap-label';
+      const key = document.createElement('span');
+      key.className = 'ap-label-key';
+      key.textContent = k + '=';
+      const val = document.createElement('span');
+      val.className = 'ap-label-val';
+      val.textContent = v;
+      lbl.appendChild(key);
+      lbl.appendChild(val);
+      meta.appendChild(lbl);
+    });
+    return meta;
+  };
+
+  const frag = document.createDocumentFragment();
+  groups.forEach(([inst, { sev, alerts }]) => {
+    const multi = alerts.length > 1;
+    const card  = document.createElement('div');
+    card.className = `ap-card ${sev}`;
+    const hdr   = document.createElement('div');
+    hdr.className = 'ap-card-hdr';
+
+    const badge = document.createElement('span');
+    badge.className = `ap-sev-badge ${sev}`;
+    badge.textContent = sev.toUpperCase();
+    hdr.appendChild(badge);
+
+    if (inst) {
+      const instEl = document.createElement('span');
+      instEl.className = 'ap-card-inst';
+      instEl.textContent = inst;
+      hdr.appendChild(instEl);
+    }
+
+    const nameCounts = new Map();
+    alerts.forEach(a => {
+      const n = a.labels?.alertname || 'unknown';
+      nameCounts.set(n, (nameCounts.get(n) || 0) + 1);
+    });
+    nameCounts.forEach((count, n) => {
+      const tagEl = document.createElement('span');
+      tagEl.className = 'ap-tag';
+      tagEl.textContent = count > 1 ? `${n} (${count})` : n;
+      hdr.appendChild(tagEl);
+    });
+
+    const cardBody = document.createElement('div');
+    cardBody.className = 'ap-card-body';
+    let hasDetails = false;
+
+    if (multi) {
+      hasDetails = true;
+      const sortedAlerts = [...alerts].sort((a, b) => {
+        const sa = sevOrder[(a.labels?.severity || 'warning').toLowerCase()] ?? 1;
+        const sb = sevOrder[(b.labels?.severity || 'warning').toLowerCase()] ?? 1;
+        return sa !== sb ? sa - sb : (a.labels?.alertname || '').localeCompare(b.labels?.alertname || '');
+      });
+      sortedAlerts.forEach(a => {
+        const asev    = (a.labels?.severity || 'warning').toLowerCase();
+        const row     = document.createElement('div');
+        row.className = 'ap-alert-row';
+        const rowBadge = document.createElement('span');
+        rowBadge.className = `ap-sev-badge ${asev}`;
+        rowBadge.style.fontSize = '8px';
+        rowBadge.textContent = asev.toUpperCase();
+        row.appendChild(rowBadge);
+        const rowContent = document.createElement('div');
+        rowContent.style.flex = '1';
+        const rowName = document.createElement('div');
+        rowName.className = 'ap-alert-row-name';
+        rowName.textContent = a.labels?.alertname || 'unknown';
+        rowContent.appendChild(rowName);
+        const summary = a.annotations?.summary || '';
+        if (summary) {
+          const sumEl = document.createElement('div');
+          sumEl.className = 'ap-alert-row-sum';
+          sumEl.textContent = summary;
+          rowContent.appendChild(sumEl);
+        }
+        const extraLabels = Object.entries(a.labels || {})
+          .filter(([k]) => !['alertname', 'severity', instanceLabel].includes(k));
+        const annotations = Object.entries(a.annotations || {})
+          .filter(([k]) => k !== 'summary');
+        if (extraLabels.length) rowContent.appendChild(makeMeta(extraLabels));
+        if (annotations.length) rowContent.appendChild(makeMeta(annotations));
+        row.appendChild(rowContent);
+        cardBody.appendChild(row);
+      });
+    } else {
+      const a           = alerts[0];
+      const summary     = a.annotations?.summary || '';
+      const extraLabels = Object.entries(a.labels || {})
+        .filter(([k]) => !['alertname', 'severity', instanceLabel].includes(k));
+      const annotations = Object.entries(a.annotations || {})
+        .filter(([k]) => k !== 'summary');
+      hasDetails = !!(summary || extraLabels.length || annotations.length);
+      if (hasDetails) {
+        if (summary) {
+          const sumEl = document.createElement('div');
+          sumEl.className = 'ap-summary';
+          sumEl.textContent = summary;
+          cardBody.appendChild(sumEl);
+        }
+        if (extraLabels.length) cardBody.appendChild(makeMeta(extraLabels, '4px'));
+        if (annotations.length) cardBody.appendChild(makeMeta(annotations, '6px'));
+      }
+    }
+
+    if (hasDetails) {
+      const arrow = document.createElement('span');
+      arrow.style.cssText = 'color:var(--text2);font-size:10px;margin-left:auto';
+      arrow.textContent = '▸';
+      hdr.appendChild(arrow);
+      hdr.addEventListener('click', () => {
+        const open = cardBody.classList.toggle('open');
+        arrow.textContent = open ? '▾' : '▸';
+      });
+      card.appendChild(hdr);
+      card.appendChild(cardBody);
+    } else {
+      card.appendChild(hdr);
+    }
+    frag.appendChild(card);
+  });
+
+  const hint = document.createElement('div');
+  hint.className = 'ap-hint';
+  hint.textContent = 'Click an alert to see the details';
+  frag.appendChild(hint);
+  body.appendChild(frag);
+}
+
+function showIssues(issues) {
+  const panel = $('alertPanel');
+  if (!issues || !issues.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  const hasRed = issues.some(i => i.severity === 'red');
+  panel.classList.toggle('orange', !hasRed);
+  $('alertCount').textContent = issues.length;
+  const sorted = [...issues].sort((a, b) => a.severity === b.severity ? 0 : a.severity === 'red' ? -1 : 1);
+  const rows = sorted.map(i => {
+    const c = i.severity === 'red' ? '#f04f4f' : '#e0972a';
+    const el = document.createElement('div');
+    el.className = 'alert-item';
+    el.innerHTML = '<span style="color:' + c + '">' + esc(i.label) + ':</span> ' + esc(i.reason);
+    return el.outerHTML;
+  });
+  $('alertList').innerHTML = rows.join('');
+}
+
+function showWarnings(warnings) {
+  const panel = $('warnPanel');
+  if (!warnings || warnings.length === 0) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  $('warnCount').textContent = warnings.length;
+  $('warnList').innerHTML = warnings.map(w => `<div class="warn-item">${esc(w)}</div>`).join('');
+}
+
+function showLinks(edges, nodes) {
+  const panel = $('linksPanel');
+  const labelOf = {};
+  nodes.forEach(n => { labelOf[n.id] = n.label || n.id; });
+  const visible = edges.filter(e => !e._zoneEdge);
+  if (!visible.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  $('linksCount').textContent = visible.length;
+  $('linksList').innerHTML = visible.map(e => {
+    const from = labelOf[e.from] || e.from;
+    const to   = labelOf[e.to]   || e.to;
+    const c    = (typeof e.color === 'object' ? e.color.color : e.color) || 'var(--text2)';
+    let tag = '';
+    if (e.id?.startsWith('__wg__'))
+      tag = `<span class="links-item-tag" style="color:#4a8adf">WG</span>`;
+    else if (e._bbProbes) {
+      const m = [...new Set(e._bbProbes.map(p => p.module === 'ssh_banner' ? 'SSH' : 'ICMP'))].join('/');
+      tag = `<span class="links-item-tag" style="color:var(--text2)">${m}</span>`;
+    }
+    const arr = (e.id?.startsWith('__wg__') || e._bbProbes) ? '→' : '↔';
+    const ef = esc(from);
+    const et = esc(to);
+    return `<div class="links-item">` +
+      `<span style="color:${c};flex-shrink:0">━</span>` +
+      `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px" title="${ef}">${ef}</span>` +
+      `<span class="links-item-sep">${arr}</span>` +
+      `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px" title="${et}">${et}</span>` +
+      `${tag}</div>`;
+  }).join('');
+}
+
+function focusOrphan(nodeId) {
+  if (!network) return;
+  network.focus(nodeId, { scale: 1.5, animation: { duration: 700, easingFunction: 'easeOutQuart' } });
+  searchBlink = { nodeId, startTime: Date.now() };
+  if (!searchBlinkId) searchBlinkLoop();
+}
+
+function showOrphans(orphanNodes) {
+  const panel = $('orphanPanel');
+  if (!orphanNodes || orphanNodes.length === 0) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  $('orphanCount').textContent = orphanNodes.length;
+  const list = $('orphanList');
+  list.replaceChildren();
+  orphanNodes.forEach(n => {
+    const label = n.label || n.id;
+    const el = document.createElement('div');
+    el.className = 'orphan-item';
+    el.textContent = label;
+    el.addEventListener('click', () => focusOrphan(n.id));
+    list.appendChild(el);
+  });
+}
+
+function applyRender(focusAfter = null) {
+  if (!lastGraphData) return;
+  const { nodes, edges, zones, zoneMembers } = lastGraphData;
+  let visNodes = nodes;
+  let visEdges = edges;
+  if (libvirtShutOffHidden || libvirtUpHidden) {
+    const hiddenIds = new Set(visNodes.filter(n =>
+      (libvirtShutOffHidden && n._libvirtOff) || (libvirtUpHidden && n._libvirtUp)
+    ).map(n => n.id));
+    visNodes = visNodes.filter(n => !hiddenIds.has(n.id));
+    visEdges = visEdges.filter(e => !hiddenIds.has(e.to));
+  }
+  if (!zonesVisible)   visEdges = visEdges.filter(e => !e._zoneEdge);
+  if (!tunnelsVisible) visEdges = visEdges.map(e => {
+    if (!e.id?.startsWith('__wg__')) return e;
+    if (thresholdColors && e._wgRatio >= thresholds.network.red)    return { ...e, color: { color: '#f04f4f', highlight: '#f04f4f', hover: '#f04f4f' } };
+    if (thresholdColors && e._wgRatio >= thresholds.network.orange) return { ...e, color: { color: '#e0972a', highlight: '#e0972a', hover: '#e0972a' } };
+    return { ...e, color: { color: 'rgba(0,0,0,0)', highlight: 'rgba(0,0,0,0)', hover: 'rgba(0,0,0,0)' }, width: 0, hoverWidth: 0, selectionWidth: 0 };
+  });
+  const bbHide = e => {
+    if (!e._bbProbes) return false;
+    return e._bbProbes.every(p =>
+      p.probeUp && (p.module === 'icmp' ? blackboxUpHidden : p.module === 'ssh_banner' ? blackboxSshUpHidden : false)
+    );
+  };
+  visEdges = visEdges.filter(e => !bbHide(e));
+  if (!visEdges.some(e => e._bbProbes)) visNodes = visNodes.filter(n => n.id !== '__prometheus__');
+  if (focusedNodeId) visEdges = visEdges.filter(e => e._zoneEdge || e.from === focusedNodeId || e.to === focusedNodeId);
+
+  // Alert color overlay + tooltip injection
+  const alertByNode  = {};
+  const alertsByNode = {};
+  lastAlerts.filter(a => a.state === 'firing').forEach(a => {
+    const instVal = a.labels?.[instanceLabel];
+    if (!instVal) return;
+    const nodeId = lastInstanceToNodeId[instVal];
+    if (!nodeId) return;
+    const sev  = (a.labels?.severity || 'warning').toLowerCase();
+    const prev = alertByNode[nodeId];
+    if (!prev || sev === 'critical' || (sev === 'warning' && prev === 'info')) alertByNode[nodeId] = sev;
+    if (!alertsByNode[nodeId]) alertsByNode[nodeId] = [];
+    alertsByNode[nodeId].push(a);
+  });
+  const alertColor = sev => sev === 'critical' ? '#f04f4f' : sev === 'info' ? '#4a8adf' : '#e0972a';
+  alertBlinkNodes = new Map(Object.entries(alertByNode).map(([id, sev]) => [id, alertColor(sev)]));
+  alertBlinkNodes.size > 0 ? startAlertBlink() : stopAlertBlink();
+  if (Object.keys(alertByNode).length) {
+    visNodes = visNodes.map(n => {
+      const sev = alertByNode[n.id];
+      if (!sev) return n;
+      const c      = alertColor(sev);
+      const alerts = alertsByNode[n.id] || [];
+      const titleEl = n.title instanceof Element ? n.title.cloneNode(true) : tipEl('');
+      const buildAlertSec = (withSummary) => {
+        if (!alerts.length) return null;
+        const sec = document.createElement('div');
+        sec.style.marginTop = '4px';
+        const hdr = document.createElement('span');
+        hdr.style.color = '#7e8aaa';
+        hdr.textContent = 'Alerts:';
+        sec.appendChild(hdr);
+        alerts.forEach(a => {
+          const asev  = (a.labels?.severity || 'warning').toLowerCase();
+          const ac    = alertColor(asev);
+          const row   = document.createElement('div');
+          const badge = document.createElement('span');
+          badge.style.color = ac;
+          badge.textContent = '⚠ ' + (a.labels?.alertname || 'unknown');
+          row.appendChild(badge);
+          if (withSummary && a.annotations?.summary) {
+            const sum = document.createElement('span');
+            sum.style.color = '#7e8aaa';
+            sum.textContent = ' ' + a.annotations.summary;
+            row.appendChild(sum);
+          }
+          sec.appendChild(row);
+        });
+        return sec;
+      };
+      const shortSec = buildAlertSec(false);
+      const fullSec  = buildAlertSec(true);
+      const fullTitleEl = n.title instanceof Element ? n.title.cloneNode(true) : tipEl('');
+      if (fullSec)  fullTitleEl.appendChild(fullSec);
+      if (shortSec) titleEl.appendChild(shortSec);
+      const updates = { title: titleEl, _fullTitle: fullTitleEl };
+      if (n._iconFn) { updates.image = ICON[n._iconFn](c); updates.font = { ...n.font, color: c }; }
+      return { ...n, ...updates };
+    });
+  }
+
+  const visZones       = zonesVisible ? zones       : [];
+  const visZoneMembers = zonesVisible ? zoneMembers : {};
+
+  // Absorb current network positions so the fast path succeeds for UI interactions
+  // (focus, view toggles) even when some nodes haven't been explicitly saved yet.
+  if (network) Object.assign(savedPositions, network.getPositions());
+
+  // Fast path: network exists and every node has a saved position -- update data without recreating
+  if (network && visNodes.every(n => savedPositions[n.id])) {
+    zoneRenderData.zones       = visZones;
+    zoneRenderData.zoneMembers = visZoneMembers;
+    const nodesWithPos = visNodes.map(n => {
+      const p = savedPositions[n.id];
+      return { ...n, x: p.x, y: p.y, physics: false };
+    });
+    // Update datasets in-place to avoid vis.js resetting the layout
+    const keepNodeIds = new Set(nodesWithPos.map(n => n.id));
+    currentNodesDataset.remove(currentNodesDataset.getIds().filter(id => !keepNodeIds.has(id)));
+    currentNodesDataset.update(nodesWithPos);
+    const keepEdgeIds = new Set(visEdges.map(e => e.id));
+    currentEdgesDataset.remove(currentEdgesDataset.getIds().filter(id => !keepEdgeIds.has(id)));
+    currentEdgesDataset.update(visEdges);
+    network.setOptions({ physics: { enabled: false }, interaction: { dragView: !selectMode } });
+    overlay('hidden');
+    if (focusAfter) {
+      network.focus(focusAfter, { scale: Math.max(network.getScale(), 1.5), animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+    }
+    return;
+  }
+
+  renderVisNetwork(visNodes, visEdges, visZones, visZoneMembers);
+  if (focusAfter && network) {
+    network.once('stabilizationIterationsDone', () => {
+      network.focus(focusAfter, { scale: Math.max(network.getScale(), 1.5), animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+    });
+  }
+}
+
+const LAYOUT_LS_KEY   = 'promlens_layout';
+const REFRESH_LS_KEY  = 'promlens_refresh';
+
+function applyLayoutData(data) {
+  if (!data || !Object.keys(data).length) return false;
+  const { __zonesVisible, __tunnelsVisible, __blackboxUpHidden, __blackboxSshUpHidden, __legendVisible, __libvirtShutOffHidden, __libvirtUpHidden, ...positions } = data;
+  if (__legendVisible          !== undefined) legendVisible          = __legendVisible;
+  if (Object.keys(positions).length)         savedPositions         = positions;
+  if (__zonesVisible           !== undefined) zonesVisible           = __zonesVisible;
+  if (__tunnelsVisible         !== undefined) tunnelsVisible         = __tunnelsVisible;
+  if (__blackboxUpHidden       !== undefined) blackboxUpHidden       = __blackboxUpHidden;
+  if (__blackboxSshUpHidden    !== undefined) blackboxSshUpHidden    = __blackboxSshUpHidden;
+  if (__libvirtShutOffHidden   !== undefined) libvirtShutOffHidden   = __libvirtShutOffHidden;
+  if (__libvirtUpHidden        !== undefined) libvirtUpHidden        = __libvirtUpHidden;
+  return true;
+}
+
+async function loadLayout() {
+  let loaded = false;
+  try {
+    const raw = localStorage.getItem(LAYOUT_LS_KEY);
+    if (raw) loaded = applyLayoutData(JSON.parse(raw));
+  } catch (_) {}
+  if (!loaded) {
+    try {
+      const r = await fetch('/api/layout');
+      if (r.ok) applyLayoutData(await r.json());
+    } catch (_) {}
+  }
+}
+
+async function saveLayout() {
+  if (network) Object.assign(savedPositions, network.getPositions());
+  try {
+    const payload = {
+      ...savedPositions,
+      __zonesVisible: zonesVisible,
+      __tunnelsVisible: tunnelsVisible,
+      __blackboxUpHidden: blackboxUpHidden,
+      __blackboxSshUpHidden: blackboxSshUpHidden,
+      __legendVisible: legendVisible,
+      __libvirtShutOffHidden: libvirtShutOffHidden,
+      __libvirtUpHidden: libvirtUpHidden,
+    };
+    localStorage.setItem(LAYOUT_LS_KEY, JSON.stringify(payload));
+    const r = await fetch('/api/layout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error();
+    const btn = $('saveLayoutBtn');
+    const prev = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = prev; }, 1500);
+  } catch (_) {
+    const btn = $('saveLayoutBtn');
+    btn.textContent = '✗';
+    setTimeout(() => { btn.textContent = '⊞'; }, 1500);
+  }
+}
+
+async function reloadConfig() {
+  const btn = $('reloadBtn');
+  const prev = btn.textContent;
+  btn.textContent = '⟳';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/reload', { method: 'POST' });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      showErr(e.detail || 'Reload failed');
+      btn.textContent = '✗';
+      setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2500);
+      return;
+    }
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 600);
+    await fetchAll();
+  } catch (e) {
+    showErr(e.message || 'Reload failed');
+    btn.textContent = '✗';
+    setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2500);
+  }
+}
+
+async function fetchAll() {
+  overlay('loading');
+  try {
+    const cfgR = await fetch('/api/config');
+    if (cfgR.ok) { const d = await cfgR.json(); promUrl = /^https?:\/\//i.test(d.url || '') ? (d.url || '') : ''; authType = d.auth_type || 'none'; instanceLabel = d.instance_label || 'instance';
+      directCredentials = !!d.direct_credentials;
+      appAuthMode = d.app_auth_mode || 'none';
+      if (appAuthMode !== 'none' && d.app_auth_user) {
+        $('userBadgeName').textContent = d.app_auth_user;
+        $('userBadge').classList.add('show');
+        $('authSep').style.display = '';
+      }
+      blackboxEnabled       = d.blackbox != null && d.blackbox?.enabled !== false;
+      blackboxHttpNodeLabel = d.blackbox?.http_node_label || 'upstream';
+      bbDestLabel = d.blackbox?.destination_label || 'instance'; bbSrcLabel = d.blackbox?.source_label || null;
+      bbDestAliases = {};
+      Object.entries(d.blackbox?.dest_aliases || {}).forEach(([node, aliases]) => {
+        (aliases || []).forEach(alias => { bbDestAliases[alias] = node; });
+      });
+      libvirtEnabled       = d.libvirt   != null && d.libvirt?.enabled   !== false;
+      libvirtInstanceLabel = d.libvirt?.instance_label || instanceLabel;
+      libvirtMetric        = d.libvirt?.metric || 'libvirt_domain_info_state';
+      frigateEnabled       = d.frigate  != null && d.frigate?.enabled   !== false;
+      frigateConfigData    = d.frigate  || null;
+      const _rawCamUrl     = d.frigate?.camera_url?.replace(/\/$/, '') || '';
+      frigateBaseUrl       = /^https?:\/\//i.test(_rawCamUrl) ? _rawCamUrl : '';
+      $('promUrlLbl').textContent = promUrl;
+      if (d.refresh !== undefined) {
+        const sel = $('refreshSel');
+        const val = String(d.refresh);
+        if (![...sel.options].some(o => o.value === val)) {
+          const opt = document.createElement('option');
+          opt.value = val;
+          opt.textContent = d.refresh >= 60 ? `${d.refresh / 60}m` : `${d.refresh}s`;
+          sel.insertBefore(opt, sel.firstChild);
+        }
+        // Apply server default only if the user has not set a preference
+        if (!localStorage.getItem(REFRESH_LS_KEY) && sel.value !== val) { sel.value = val; scheduleRefresh(); }
+      }
+      thresholdColors = d.threshold_colors !== false;
+      if (d.thresholds)         thresholds        = d.thresholds;
+      if (d.thresholds_by_node) thresholdsByNode  = d.thresholds_by_node;
+    }
+  } catch (_) {}
+
+  try {
+    const post = makePost();
+    const [topoR, promR, rxR, txR, speedR, unameR, cpuR, memAvailR, memTotalR, diskAvailR, diskTotalR, loadR, bootR, systemdR, blackboxR, blackboxSshR, blackboxTcpR, blackboxHttpR, libvirtR, frigateR, alertsR] = await Promise.all([
+      fetch('/api/topology'),
+      post('up{exporter="node"}'),
+      post('rate(node_network_receive_bytes_total{device!~"lo|veth.*|vnet.*|docker.*|br-.*|virbr.*"}[5m])'),
+      post('rate(node_network_transmit_bytes_total{device!~"lo|veth.*|vnet.*|docker.*|br-.*|virbr.*"}[5m])'),
+      post('node_network_speed_bytes{device!~"lo|veth.*|vnet.*|docker.*|br-.*|virbr.*"}'),
+      post('node_uname_info'),
+      post('avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[5m]))'),
+      post('node_memory_MemAvailable_bytes'),
+      post('node_memory_MemTotal_bytes'),
+      post('node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|rootfs|overlay"}'),
+      post('node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|rootfs|overlay"}'),
+      post('node_load1'),
+      post('node_boot_time_seconds'),
+      post('node_systemd_unit_state{state="failed"} == 1'),
+      blackboxEnabled ? post('probe_success{module="icmp"}')        : Promise.resolve({ ok: false }),
+      blackboxEnabled ? post('probe_success{module="ssh_banner"}')  : Promise.resolve({ ok: false }),
+      blackboxEnabled ? post('probe_success{module="tcp_connect"}')   : Promise.resolve({ ok: false }),
+      blackboxEnabled ? post('probe_success{module=~"https?_2xx"}')   : Promise.resolve({ ok: false }),
+      libvirtEnabled  ? post(libvirtMetric) : Promise.resolve({ ok: false }),
+      frigateEnabled  ? post('frigate_camera_fps')        : Promise.resolve({ ok: false }),
+      authType === 'cert'
+        ? fetch(`${promUrl.replace(/\/$/, '')}/api/v1/alerts`, { credentials: directCredentials ? 'include' : 'omit' }).catch(() => ({ ok: false }))
+        : fetch('/api/alerts'),
+    ]);
+
+    if (!promR.ok) { const e = await promR.json(); throw new Error(e.detail||`HTTP ${promR.status}`); }
+
+    const topo = topoR.ok ? await topoR.json() : { nodes:[], networks:[] };
+    const prom = await promR.json();
+
+    // Build the network metrics index: instance -> device -> { rx, tx, speed }
+    const netMetrics = {};
+    const indexNetMetric = (result, field) => {
+      if (!result?.instances) return;
+      result.instances.forEach(inst => {
+        const key = inst.labels[instanceLabel];
+        const dev = inst.labels.device;
+        if (!key || !dev) return;
+        if (!netMetrics[key]) netMetrics[key] = {};
+        if (!netMetrics[key][dev]) netMetrics[key][dev] = { rx: null, tx: null, speed: null };
+        netMetrics[key][dev][field] = parseFloat(inst.value);
+      });
+    };
+    indexNetMetric(rxR.ok    ? await rxR.json()    : null, 'rx');
+    indexNetMetric(txR.ok    ? await txR.json()    : null, 'tx');
+    indexNetMetric(speedR.ok ? await speedR.json() : null, 'speed');
+
+    // Build the host metrics index: instance -> { hostname, os, cpuIdle, memAvail, memTotal, diskAvail, diskTotal, load1, bootTime }
+    const hostMetrics = {};
+    const setHost = (result, field, parse = r => parseFloat(r.value)) => {
+      if (!result?.instances) return;
+      result.instances.forEach(r => {
+        const k = r.labels[instanceLabel]; if (!k) return;
+        if (!hostMetrics[k]) hostMetrics[k] = {};
+        hostMetrics[k][field] = parse(r);
+      });
+    };
+    if (unameR.ok) {
+      const u = await unameR.json();
+      u?.instances?.forEach(r => {
+        const k = r.labels[instanceLabel]; if (!k) return;
+        if (!hostMetrics[k]) hostMetrics[k] = {};
+        hostMetrics[k].hostname = r.labels.nodename;
+        hostMetrics[k].os       = `${r.labels.sysname} ${r.labels.release}`;
+      });
+    }
+    setHost(cpuR.ok       ? await cpuR.json()       : null, 'cpuIdle');
+    setHost(memAvailR.ok  ? await memAvailR.json()  : null, 'memAvail');
+    setHost(memTotalR.ok  ? await memTotalR.json()  : null, 'memTotal');
+    setHost(diskAvailR.ok ? await diskAvailR.json() : null, 'diskAvail');
+    setHost(diskTotalR.ok ? await diskTotalR.json() : null, 'diskTotal');
+    setHost(loadR.ok      ? await loadR.json()      : null, 'load1');
+    setHost(bootR.ok      ? await bootR.json()      : null, 'bootTime');
+
+    // Index of failed systemd units: instance -> [unit names]
+    const systemdFailed = {};
+    if (systemdR.ok) {
+      const sd = await systemdR.json();
+      sd?.instances?.forEach(r => {
+        const k = r.labels[instanceLabel]; if (!k) return;
+        if (!systemdFailed[k]) systemdFailed[k] = [];
+        systemdFailed[k].push(r.labels.name);
+      });
+    }
+
+    const blackboxProm    = blackboxR.ok       ? await blackboxR.json()       : null;
+    const blackboxSshProm = blackboxSshR.ok    ? await blackboxSshR.json()    : null;
+    const blackboxTcpProm  = blackboxTcpR.ok   ? await blackboxTcpR.json()   : null;
+    const blackboxHttpProm = blackboxHttpR.ok  ? await blackboxHttpR.json()  : null;
+    const libvirtProm     = libvirtR.ok  ? await libvirtR.json()  : null;
+    const frigateProm     = frigateR.ok  ? await frigateR.json()  : null;
+
+    hideErr();
+    setStatus('ok', 'connected');
+    $('lastUpdate').textContent = new Date().toLocaleTimeString();
+
+    const { nodes, edges, stats, zones, zoneMembers, blinkNodes, warnings, orphanNodes, issues, instanceToNodeId } = buildGraph(topo, prom, netMetrics, hostMetrics, systemdFailed, instanceLabel, blackboxProm, blackboxSshProm, libvirtProm, libvirtInstanceLabel, frigateProm, frigateConfigData, blackboxTcpProm, blackboxHttpProm, blackboxHttpNodeLabel, thresholdColors);
+    lastInstanceToNodeId = instanceToNodeId;
+    const _alertsRaw = alertsR.ok ? await alertsR.json() : [];
+    showPromAlerts(Array.isArray(_alertsRaw) ? _alertsRaw : (_alertsRaw?.data?.alerts ?? []));
+    showIssues(issues);
+    showWarnings(warnings);
+    showLinks(edges, nodes);
+    showOrphans(orphanNodes);
+
+    $('totalCount').textContent = stats.total;
+    $('upCount').textContent    = stats.up;
+    $('downCount').textContent  = stats.down;
+    $('statsBar').classList.toggle('show', stats.total > 0);
+
+    blinkingNodes = blinkNodes;
+    blinkNodes.size > 0 ? startBlink() : stopBlink();
+
+    lastGraphData = { nodes, edges, zones, zoneMembers };
+    applyRender();
+
+  } catch (e) {
+    showErr(e.message);
+    setStatus('err', e.message.slice(0, 40));
+    overlay('show', 'Could not reach Prometheus.');
+    $('statsBar').classList.remove('show');
+  }
+}
+
+// -- INIT -----------------------------------------------------
+window.addEventListener('DOMContentLoaded', async () => {
+  $('reloadBtn').addEventListener('click',    reloadConfig);
+  $('testBtn').addEventListener('click',      fetchAll);
+  $('refreshBtn').addEventListener('click',   fetchAll);
+  $('logoutBtn').addEventListener('click', async () => {
+    await fetch('/api/auth/logout', {method: 'POST'});
+    window.location.replace('/login');
+  });
+  $('fitBtn').addEventListener('click',       () => network && network.fit({ animation:{ duration:500, easingFunction:'easeOutQuart' } }));
+  $('resetBtn').addEventListener('click',     () => { savedPositions = {}; isFirst = true; localStorage.removeItem(LAYOUT_LS_KEY); fetchAll(); });
+  $('saveLayoutBtn').addEventListener('click', saveLayout);
+
+  function setSelectMode(on) {
+    selectMode = on;
+    if (network) network.setOptions({ interaction: { dragView: !on } });
+    if (!on) { rubberBand = null; if (network) network.redraw(); }
+    [$('selectModeBtn'), $('fsSelectModeBtn')].forEach(btn => btn?.classList.toggle('active', on));
+  }
+  $('selectModeBtn').addEventListener('click',   () => setSelectMode(!selectMode));
+  $('fsSelectModeBtn').addEventListener('click', () => setSelectMode(!selectMode));
+
+  // -- VIEWS DROPDOWN ------------------------------------------
+  function viewIsOn(key) {
+    if (key === 'zones')   return zonesVisible;
+    if (key === 'tunnels') return tunnelsVisible;
+    if (key === 'icmp')    return !blackboxUpHidden;
+    if (key === 'ssh')     return !blackboxSshUpHidden;
+    if (key === 'legend')     return legendVisible;
+    if (key === 'libvirt-off') return !libvirtShutOffHidden;
+    if (key === 'libvirt-up')  return !libvirtUpHidden;
+    return true;
+  }
+
+  function syncViewsDropdown() {
+    document.querySelectorAll('#viewsPanel .views-item').forEach(el => {
+      const on = viewIsOn(el.dataset.key);
+      el.classList.toggle('on', on);
+    });
+    $('fsZoneBtn').classList.toggle('active', zonesVisible);
+    $('fsTunnelBtn').classList.toggle('active', tunnelsVisible);
+    $('fsBbBtn').classList.toggle('active', !blackboxUpHidden);
+    $('fsBbSshBtn').classList.toggle('active', !blackboxSshUpHidden);
+    const anyOff = !zonesVisible || !tunnelsVisible || blackboxUpHidden || blackboxSshUpHidden || !legendVisible || libvirtShutOffHidden || libvirtUpHidden;
+    $('viewsHiddenDot').classList.toggle('show', anyOff);
+    $('netLegend').style.display = legendVisible ? '' : 'none';
+  }
+
+  function toggleView(key) {
+    if (key === 'zones')   zonesVisible        = !zonesVisible;
+    if (key === 'tunnels') tunnelsVisible       = !tunnelsVisible;
+    if (key === 'icmp')    blackboxUpHidden     = !blackboxUpHidden;
+    if (key === 'ssh')     blackboxSshUpHidden  = !blackboxSshUpHidden;
+    if (key === 'legend')      legendVisible        = !legendVisible;
+    if (key === 'libvirt-off') libvirtShutOffHidden = !libvirtShutOffHidden;
+    if (key === 'libvirt-up')  libvirtUpHidden      = !libvirtUpHidden;
+    syncViewsDropdown();
+    if (key !== 'legend') applyRender();
+  }
+
+  $('viewsBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    $('viewsPanel').classList.toggle('open');
+  });
+  document.addEventListener('click', () => $('viewsPanel').classList.remove('open'));
+  $('viewsPanel').addEventListener('click', e => e.stopPropagation());
+  document.querySelectorAll('#viewsPanel .views-item').forEach(el => {
+    el.addEventListener('click', () => toggleView(el.dataset.key));
+  });
+  syncViewsDropdown();
+
+  // -- FULLSCREEN -----------------------------------------------
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) $('netWrap').requestFullscreen();
+    else document.exitFullscreen();
+  }
+  $('fullscreenBtn').addEventListener('click', toggleFullscreen);
+
+  let fsMoveTimer = null;
+  $('netWrap').addEventListener('mousemove', () => {
+    if (!document.fullscreenElement) return;
+    $('fsBar').classList.add('visible');
+    clearTimeout(fsMoveTimer);
+    fsMoveTimer = setTimeout(() => $('fsBar').classList.remove('visible'), 2500);
+  });
+
+  document.addEventListener('fullscreenchange', () => {
+    const fs = !!document.fullscreenElement;
+    $('fullscreenBtn').classList.toggle('active', fs);
+    if (fs) {
+      $('fsZoneBtn').classList.toggle('active', zonesVisible);
+      $('fsTunnelBtn').classList.toggle('active', tunnelsVisible);
+      $('fsBbBtn').classList.toggle('active', !blackboxUpHidden);
+      $('fsBbSshBtn').classList.toggle('active', !blackboxSshUpHidden);
+    } else {
+      clearTimeout(fsMoveTimer);
+      $('fsBar').classList.remove('visible');
+    }
+  });
+
+  $('fsFitBtn').addEventListener('click',     () => $('fitBtn').click());
+  $('fsRefreshBtn').addEventListener('click', () => $('refreshBtn').click());
+  $('fsZoneBtn').addEventListener('click',    () => toggleView('zones'));
+  $('fsTunnelBtn').addEventListener('click',  () => toggleView('tunnels'));
+  $('fsBbBtn').addEventListener('click',      () => toggleView('icmp'));
+  $('fsBbSshBtn').addEventListener('click',   () => toggleView('ssh'));
+  $('refreshSel').addEventListener('change', () => {
+    localStorage.setItem(REFRESH_LS_KEY, $('refreshSel').value);
+    scheduleRefresh();
+  });
+
+  // Restore user refresh preference before first fetch
+  const savedRefresh = localStorage.getItem(REFRESH_LS_KEY);
+  if (savedRefresh !== null) {
+    const sel = $('refreshSel');
+    if (![...sel.options].some(o => o.value === savedRefresh)) {
+      const opt = document.createElement('option');
+      opt.value = savedRefresh;
+      const n = parseInt(savedRefresh);
+      opt.textContent = n >= 60 ? `${n / 60}m` : n > 0 ? `${n}s` : 'off';
+      sel.insertBefore(opt, sel.firstChild);
+    }
+    sel.value = savedRefresh;
+  }
+
+  $('searchInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { searchNode(e.target.value); e.target.blur(); }
+    if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+      e.preventDefault(); $('searchInput').focus(); $('searchInput').select();
+    }
+    if (e.key === 'Escape') {
+      if ($('alertsPage').style.display === 'flex') { closeAlertsPage(); return; }
+      if (focusedNodeId !== null) { focusedNodeId = null; applyRender(); }
+    }
+  });
+  $('apBackBtn').addEventListener('click', closeAlertsPage);
+
+  await loadLayout();
+  syncViewsDropdown();
+  fetchAll();
+  scheduleRefresh();
+});
+</script>
+
+<dialog id="nodeTipModal">
+  <div class="ntm-hdr">
+    <span id="ntmTitle" class="ntm-title"></span>
+    <button class="ntm-close" onclick="document.getElementById('nodeTipModal').close()">✕</button>
+  </div>
+  <div id="ntmBody" class="ntm-body"></div>
+</dialog>
+</body>
+</html>
