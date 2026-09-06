@@ -4,7 +4,71 @@
 
 Visualiseur de topologie reseau qui superpose les metriques Prometheus temps reel sur un graphe Vis.js interactif.
 
-Version : **0.15.0**
+Version : **0.16.1**
+
+## Captures d'ecran
+
+Toutes les captures ci-dessous tournent sur la configuration d'exemple livree dans `examples/data/`.
+
+### Vue d'ensemble de la topologie
+
+Noeuds de topologie statiques, hotes Prometheus rattaches par zone ou par hyperviseur, tunnels
+WireGuard, sondes blackbox et cameras Frigate sur une seule carte.
+
+![Vue d'ensemble](docs/screenshots/overview.png)
+
+### Metriques d'un noeud
+
+Le survol d'un noeud affiche son OS, l'usage CPU / RAM / disque, la charge, l'uptime, les unites
+systemd en echec, le resultat des sondes et -- sur un hyperviseur -- l'etat de chaque domaine libvirt.
+
+![Infobulle d'un noeud](docs/screenshots/node-tooltip.png)
+
+### Debit des interfaces
+
+Le survol d'un lien affiche le RX/TX par interface aux deux extremites. Les liens passent en orange
+a 70% et en rouge a 90% de la vitesse de l'interface.
+
+![Infobulle d'un lien](docs/screenshots/link-tooltip.png)
+
+### Menu VIEWS
+
+Affiche ou masque les zones, les tunnels, les liens de sonde, la legende, et cache les noeuds
+invites (VM / LXC / POD) par etat : non supervise, down, up.
+
+![Menu VIEWS](docs/screenshots/views-menu.png)
+
+### Panneaux lateraux
+
+Les alertes Prometheus, les alertes calculees par ProMLens, tous les liens dessines et les noeuds
+sans parent structurel.
+
+![Panneaux lateraux](docs/screenshots/panels.png)
+
+### Page des alertes Prometheus
+
+Les alertes groupees par noeud et triees par severite, depliables pour afficher labels et annotations.
+
+![Page des alertes Prometheus](docs/screenshots/alerts-page.png)
+
+### Reproduire la demo
+
+`examples/mock_prometheus.py` est un faux Prometheus sans dependance (stdlib uniquement) qui sert un
+jeu de donnees de demonstration correspondant a `examples/data/topology.yaml` -- aucun Prometheus reel
+n'est necessaire.
+
+```bash
+# 1. Servir le jeu de donnees de demo sur http://127.0.0.1:9090
+python3 examples/mock_prometheus.py &
+
+# 2. Faire pointer une copie de la configuration d'exemple dessus
+mkdir -p /tmp/promlens-demo
+cp examples/data/topology.yaml examples/data/layout.json /tmp/promlens-demo/
+sed 's|^url: .*|url: http://127.0.0.1:9090|' examples/data/promlens.yaml > /tmp/promlens-demo/promlens.yaml
+
+# 3. Lancer ProMLens dessus, puis ouvrir http://127.0.0.1:8000
+./run.sh /tmp/promlens-demo/promlens.yaml /tmp/promlens-demo/topology.yaml /tmp/promlens-demo/layout.json
+```
 
 ## Demarrage rapide
 
