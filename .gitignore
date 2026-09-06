@@ -18,3 +18,5 @@ debian/files
 debian/promlens.debhelper.log
 debian/promlens.postrm.debhelper
 debian/promlens.substvars
+
+Makefile.u
