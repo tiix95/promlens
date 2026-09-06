@@ -4,7 +4,70 @@
 
 Network topology visualizer that overlays real-time Prometheus metrics on an interactive Vis.js graph.
 
-Version: **0.15.0**
+Version: **0.16.1**
+
+## Screenshots
+
+Every screenshot below runs on the sample configuration shipped in `examples/data/`.
+
+### Topology overview
+
+Static topology nodes, Prometheus hosts attached by zone or hypervisor, WireGuard tunnels,
+blackbox probes and Frigate cameras on a single map.
+
+![Topology overview](docs/screenshots/overview.png)
+
+### Node metrics
+
+Hovering a node shows its OS, CPU / RAM / disk usage, load, uptime, failed systemd units,
+probe results and — on a hypervisor — the state of every libvirt domain.
+
+![Node tooltip](docs/screenshots/node-tooltip.png)
+
+### Interface throughput
+
+Hovering a link shows RX/TX per interface on both ends. Links turn orange at 70% and red at
+90% of the interface speed.
+
+![Link tooltip](docs/screenshots/link-tooltip.png)
+
+### Views menu
+
+Toggle zones, tunnels, probe links, the legend, and hide guest nodes (VM / LXC / POD) per
+state: unmonitored, down, up.
+
+![Views menu](docs/screenshots/views-menu.png)
+
+### Side panels
+
+Prometheus alerts, the alerts ProMLens computes itself, every rendered link and the nodes
+with no structural parent.
+
+![Side panels](docs/screenshots/panels.png)
+
+### Prometheus alerts page
+
+Alerts grouped by node and sorted by severity, expandable to show labels and annotations.
+
+![Prometheus alerts page](docs/screenshots/alerts-page.png)
+
+### Reproducing the demo
+
+`examples/mock_prometheus.py` is a stdlib-only mock Prometheus that serves a demo dataset
+matching `examples/data/topology.yaml` — no real Prometheus needed.
+
+```bash
+# 1. Serve the demo dataset on http://127.0.0.1:9090
+python3 examples/mock_prometheus.py &
+
+# 2. Point a copy of the sample config at it
+mkdir -p /tmp/promlens-demo
+cp examples/data/topology.yaml examples/data/layout.json /tmp/promlens-demo/
+sed 's|^url: .*|url: http://127.0.0.1:9090|' examples/data/promlens.yaml > /tmp/promlens-demo/promlens.yaml
+
+# 3. Run ProMLens on it, then open http://127.0.0.1:8000
+./run.sh /tmp/promlens-demo/promlens.yaml /tmp/promlens-demo/topology.yaml /tmp/promlens-demo/layout.json
+```
 
 ## Quick start
 
