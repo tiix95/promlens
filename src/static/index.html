@@ -1787,7 +1787,8 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       nodes.push({
         id: vmId,
         _kind:  'vm',
-        _state: isNaN(v) ? 'unmonitored' : v === 1 ? 'up' : 'down',
+        // No node_exporter behind this VM: whatever libvirt reports, it is unmonitored
+        _state: 'unmonitored',
         label: short,
         shape: 'image',
         image: ICON.vm(color),
