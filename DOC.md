@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.20.1**
+Version: **0.20.2**
 
 ---
 
@@ -175,9 +175,9 @@ blackbox:
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | bool | `true` | Enable/disable without removing the section |
-| `destination_label` | string | `instance` | Label that holds the probe target identifier; may point at a group label shared by several probes (see below) |
+| `destination_label` | string | `instance` | Label that holds the probe target identifier; may point at a group label shared by several probes (see below). A series missing this label falls back to `instance_label`, then to `instance` |
 | `source_label` | string | none | Label that holds the probe source identifier |
-| `http_node_label` | string | `upstream` | Label identifying the node for HTTP/HTTPS probes, falling back to `parent_label` when absent |
+| `http_node_label` | string | `upstream` | Label identifying the node for HTTP/HTTPS probes. A series missing this label falls back to `upstream`, then to `parent_label`; a series carrying none of them is skipped |
 | `modules` | map | see below | Blackbox module names queried for each role |
 | `dest_aliases` | map | `{}` | Maps topology node IDs to lists of probe target aliases |
 
@@ -245,7 +245,19 @@ Consequences:
 - **Graph edge**: the edge between the two nodes keeps one entry per probe. Its tooltip prints a `targets:` line and tags each probe row with its target.
 - **Edge click**: opens `probe_success{instance="<target>"}` for the real probe target, not the group value.
 
-Configurations using the default `destination_label: instance` are unaffected: the destination value and the probe target are the same string.
+**Series without the group label.** A probe that does not carry the configured label is no longer dropped: it falls back to the default label of the option it is missing.
+
+| Role | Node key | Fallback when the configured label is absent |
+|---|---|---|
+| `icmp`, `ssh` | `destination_label` | `instance_label` value, then `instance` |
+| `tcp` | `instance_label` | `instance` |
+| `http` | `http_node_label` | `upstream`, then `parent_label`, then the series is skipped |
+
+With `destination_label: parent` and `http_node_label: parent`, an ICMP series carrying `instance="orphan-host"` but no `parent` label attaches to the node resolved from `orphan-host` instead of disappearing, so its DOWN state stays visible. An HTTP series carrying `upstream="synacktiv"` but no `parent` label attaches to `synacktiv`.
+
+There is deliberately no `instance` fallback for the HTTP role: an HTTP probe's `instance` label holds a URL, and the port-stripping logic (split on the last colon) would turn `https://c.example` into a bogus host named `https`. An HTTP series carrying none of the configured label, `upstream` and `parent_label` is still skipped.
+
+Configurations using the default `destination_label: instance` are unaffected: the destination value and the probe target are the same string, and the configured label is also the fallback label.
 
 ### frigate section
 

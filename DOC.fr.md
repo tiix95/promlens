@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.20.1**
+Version : **0.20.2**
 
 ---
 
@@ -175,9 +175,9 @@ blackbox:
 | Champ | Type | Défaut | Description |
 |---|---|---|---|
 | `enabled` | bool | `true` | Active/désactive sans supprimer la section |
-| `destination_label` | string | `instance` | Label qui contient l'identifiant de la cible de sonde ; peut pointer sur un label de groupe partage par plusieurs sondes (voir ci-dessous) |
+| `destination_label` | string | `instance` | Label qui contient l'identifiant de la cible de sonde ; peut pointer sur un label de groupe partage par plusieurs sondes (voir ci-dessous). Une serie sans ce label retombe sur `instance_label`, puis sur `instance` |
 | `source_label` | string | aucun | Label qui contient l'identifiant de la source de sonde |
-| `http_node_label` | string | `upstream` | Label identifiant le noeud pour les sondes HTTP/HTTPS, avec repli sur `parent_label` s'il est absent |
+| `http_node_label` | string | `upstream` | Label identifiant le noeud pour les sondes HTTP/HTTPS. Une serie sans ce label retombe sur `upstream`, puis sur `parent_label` ; une serie qui n'a aucun des trois est ignoree |
 | `modules` | map | voir ci-dessous | Noms des modules blackbox interrogés pour chaque rôle |
 | `dest_aliases` | map | `{}` | Associe des ID de noeuds de topologie à des listes d'alias de cibles de sonde |
 
@@ -245,7 +245,19 @@ Consequences :
 - **Lien du graphe** : le lien entre les deux noeuds garde une entree par sonde. Son tooltip affiche une ligne `targets:` et tague chaque ligne de sonde avec sa cible.
 - **Clic sur le lien** : ouvre `probe_success{instance="<cible>"}` sur la cible reelle de la sonde, pas sur la valeur du groupe.
 
-Les configurations utilisant le defaut `destination_label: instance` ne sont pas affectees : la valeur de destination et la cible de la sonde sont la meme chaine.
+**Series sans le label de groupe.** Une sonde qui ne porte pas le label configure n'est plus perdue : elle retombe sur le label par defaut de l'option qui lui manque.
+
+| Role | Cle de noeud | Repli quand le label configure est absent |
+|---|---|---|
+| `icmp`, `ssh` | `destination_label` | valeur de `instance_label`, puis `instance` |
+| `tcp` | `instance_label` | `instance` |
+| `http` | `http_node_label` | `upstream`, puis `parent_label`, puis la serie est ignoree |
+
+Avec `destination_label: parent` et `http_node_label: parent`, une serie ICMP portant `instance="orphan-host"` mais aucun label `parent` se rattache au noeud resolu depuis `orphan-host` au lieu de disparaitre, donc son etat DOWN reste visible. Une serie HTTP portant `upstream="synacktiv"` mais aucun label `parent` se rattache a `synacktiv`.
+
+Il n'y a volontairement aucun repli sur `instance` pour le role HTTP : le label `instance` d'une sonde HTTP contient une URL, et le decoupage du port (dernier deux-points) transformerait `https://c.example` en un faux hote nomme `https`. Une serie HTTP qui ne porte ni le label configure, ni `upstream`, ni `parent_label` reste ignoree.
+
+Les configurations utilisant le defaut `destination_label: instance` ne sont pas affectees : la valeur de destination et la cible de la sonde sont la meme chaine, et le label configure est aussi le label de repli.
 
 ### Section frigate
 

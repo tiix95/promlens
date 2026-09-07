@@ -743,12 +743,22 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     if (raw && p && p !== raw && !probeParent[raw]) probeParent[raw] = p;
   };
 
+  // -- Probe-to-node attachment keys ----------------------------
+  // A series missing the configured label falls back to that option's own
+  // default label rather than being dropped: `instance` for destination_label,
+  // `upstream` for http_node_label. HTTP then falls back to the parent label,
+  // never to `instance`: an HTTP probe's `instance` holds a URL, which would
+  // split on "://" into a bogus host.
+  const bbInstanceOf = inst => inst.labels[instLabel] || inst.labels.instance || '';
+  const bbDestKey    = inst => inst.labels[bbDestLabel]   || bbInstanceOf(inst);
+  const bbHttpKey    = inst => inst.labels[httpNodeLabel] || inst.labels.upstream || inst.labels[parentLabel] || '';
+
   // -- TCP connect index : host -> [{ service, port, tool, probeSuccess }]
   const tcpByHost = {};
   const tcpRawKeys = new Set();
   if (tcpData?.instances) {
     tcpData.instances.forEach(inst => {
-      const raw  = inst.labels[instLabel] || '';
+      const raw  = bbInstanceOf(inst);
       const last = raw.lastIndexOf(':');
       const host = last > 0 ? raw.slice(0, last) : raw;
       if (raw) { tcpRawKeys.add(raw); rememberProbeParent(raw, inst); }
@@ -791,12 +801,12 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       // A reverse-proxied url has an upstream; one served by the host itself
       // only carries the parent label. Without this fallback the probe was
       // silently dropped.
-      const raw  = inst.labels[httpNodeLabel] || inst.labels[parentLabel] || '';
+      const raw  = bbHttpKey(inst);
       const last = raw.lastIndexOf(':');
       const host = last > 0 ? raw.slice(0, last) : raw;
       if (raw) { httpRawKeys.add(raw); rememberProbeParent(raw, inst); }
       const probe = {
-        target:       inst.labels[instLabel] || inst.labels.instance || raw,
+        target:       bbInstanceOf(inst) || raw,
         probeSuccess: parseFloat(inst.value) === 1,
       };
       [raw, host].filter(Boolean).forEach(k => {
@@ -830,7 +840,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
   const bbSrcByHost  = {}; // src -> [{ module, probeSuccess, destHost, target }] -- only when source_label configured
   const bbDestRawKeys = new Set();
   [...(blackboxData?.instances || []), ...(blackboxSshData?.instances || [])].forEach(inst => {
-    const raw  = inst.labels[bbDestLabel] || '';
+    const raw  = bbDestKey(inst);
     const last = raw.lastIndexOf(':');
     const host = last > 0 ? raw.slice(0, last) : raw;
     if (raw) { bbDestRawKeys.add(raw); rememberProbeParent(raw, inst); }
@@ -840,7 +850,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       module:       inst.labels.module || '',
       probeSuccess: parseFloat(inst.value) === 1,
       src:          srcRaw || 'prometheus',
-      target:       inst.labels[instLabel] || inst.labels.instance || raw,
+      target:       bbInstanceOf(inst) || raw,
     };
     [raw, host].filter(Boolean).forEach(k => {
       if (!bbDestByHost[k]) bbDestByHost[k] = [];
@@ -1058,7 +1068,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     };
     const seenPairs = new Set();
     [...(blackboxData?.instances || []), ...(blackboxSshData?.instances || [])].forEach(bi => {
-      const destRaw = bi.labels[bbDestLabel] || '';
+      const destRaw = bbDestKey(bi);
       const srcRaw  = bbSrcLabel ? (bi.labels[bbSrcLabel] || '') : '';
       if (!destRaw || !srcRaw) return;
       const destHost = destRaw.lastIndexOf(':') > 0 ? destRaw.slice(0, destRaw.lastIndexOf(':')) : destRaw;
@@ -2013,7 +2023,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     if (!data?.instances?.length) return;
     const seen = new Set();
     data.instances.forEach(inst => {
-      const targetRaw = inst.labels[bbDestLabel] || '';
+      const targetRaw = bbDestKey(inst);
       if (!targetRaw) return;
 
       // Source resolution
@@ -2029,7 +2039,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
 
       // Dedup on the real probe target, not on the destination label: a group
       // label shared by several probes would otherwise keep only the first one.
-      const probeTarget = inst.labels[instLabel] || inst.labels.instance || targetRaw;
+      const probeTarget = bbInstanceOf(inst) || targetRaw;
       const seenKey = `${srcId}:::${targetRaw}:::${probeTarget}`;
       if (seen.has(seenKey)) return;
       seen.add(seenKey);

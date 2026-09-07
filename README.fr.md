@@ -4,7 +4,7 @@
 
 Visualiseur de topologie reseau qui superpose les metriques Prometheus temps reel sur un graphe Vis.js interactif.
 
-Version : **0.20.1**
+Version : **0.20.2**
 
 ## Captures d'ecran
 
