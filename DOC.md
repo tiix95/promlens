@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.18.0**
+Version: **0.18.1**
 
 ---
 
@@ -1076,7 +1076,7 @@ State is resolved in `buildGraph`:
 
 - Every topology node starts as `unmonitored`.
 - Phase 5: a node merged with a Prometheus `up` instance becomes `up` (`up == 1`) or `down` (`up == 0`). A non-numeric value leaves it `unmonitored`.
-- VM nodes created from the libvirt exporter (VMs with no `node_exporter` of their own) always get kind `vm`; their state comes from the libvirt domain state metric: `1` (running) -> `up`, any other numeric value (shut off, paused, crashed, pmsuspended) -> `down`, non-numeric -> `unmonitored`.
+- Phase 5c: VM nodes created from the libvirt exporter (VMs with no `node_exporter` of their own) always get kind `vm` and always stay `unmonitored`, whatever libvirt reports. Such a VM is not actually monitored, so it must never count as up or down. Its colour, icon and tooltip still show the real libvirt state (running, paused, shut off, crashed). As a result, VM DOWN and VM UP only apply to VMs declared in `topology.yaml` and merged with a Prometheus `up` series: a VM is `up` only if it is declared in the topology *and* an `up` series matches it with value `1`.
 
 Toggle states are saved by `POST /api/layout` under `__guestHidden`, an object mapping `"<kind>-<state>"` (for example `"vm-down"`) to a boolean meaning *hidden*. The legacy keys `__libvirtShutOffHidden` and `__libvirtUpHidden` are ignored when an older layout is loaded.
 

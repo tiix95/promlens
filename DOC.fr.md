@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.18.0**
+Version : **0.18.1**
 
 ---
 
@@ -1076,7 +1076,7 @@ L'état est résolu dans `buildGraph` :
 
 - Chaque noeud de topologie démarre à `unmonitored`.
 - Phase 5 : un noeud fusionné avec une instance Prometheus `up` passe à `up` (`up == 1`) ou `down` (`up == 0`). Une valeur non numérique le laisse à `unmonitored`.
-- Les noeuds VM créés depuis l'exporteur libvirt (VM sans `node_exporter` propre) reçoivent toujours le type `vm` ; leur état vient de la métrique d'état de domaine libvirt : `1` (running) -> `up`, toute autre valeur numérique (shut off, paused, crashed, pmsuspended) -> `down`, non numérique -> `unmonitored`.
+- Phase 5c : les noeuds VM créés depuis l'exporteur libvirt (VM sans `node_exporter` propre) reçoivent toujours le type `vm` et restent toujours à `unmonitored`, quel que soit l'état rapporté par libvirt. Une telle VM n'est pas réellement supervisée, elle ne doit donc jamais compter comme up ou down. Sa couleur, son icône et son infobulle affichent toujours l'état libvirt réel (running, paused, shut off, crashed). En conséquence, VM DOWN et VM UP ne s'appliquent qu'aux VM déclarées dans `topology.yaml` et fusionnées avec une série Prometheus `up` : une VM est `up` seulement si elle est déclarée dans la topologie *et* qu'une série `up` lui correspond avec la valeur `1`.
 
 L'état des bascules est sauvegardé par `POST /api/layout` sous la clé `__guestHidden`, un objet associant `"<kind>-<state>"` (par exemple `"vm-down"`) à un booléen signifiant *masqué*. Les clés historiques `__libvirtShutOffHidden` et `__libvirtUpHidden` sont ignorées au chargement d'un layout plus ancien.
 
