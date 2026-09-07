@@ -48,6 +48,8 @@ blackbox:
   destination_label: dest   # label identifying the probe target node (default: instance)
   source_label: job         # label identifying the source node; if absent or unresolved -> prometheus
   # enabled: false          # set to false to disable without removing the section
+  # prometheus_node: mon01  # topology node hosting Prometheus: probes with no resolved
+  #                         # source start from it instead of a standalone "prometheus" node
   # http_node_label: upstream  # label identifying the node for http/https_2xx probes (default: upstream)
   # modules:                  # blackbox module names queried, per role
   #   icmp: [icmp]            # ICMP probes -> graph edges (default: icmp)

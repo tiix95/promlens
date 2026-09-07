@@ -182,6 +182,7 @@ blackbox:
   enabled: true
   destination_label: instance    # label identifying the probe target (default: instance)
   source_label: job              # label identifying the probe source; if absent, shows as "prometheus"
+  prometheus_node: mon01         # topology node hosting Prometheus (default source of the probes)
   http_node_label: upstream      # label for HTTP/HTTPS probes to identify the node (default: upstream)
   modules:                       # blackbox module names queried, per role
     icmp: [icmp]                 # default
@@ -199,6 +200,7 @@ blackbox:
 | `enabled` | bool | `true` | Enable/disable without removing the section |
 | `destination_label` | string | `instance` | Label that holds the probe target identifier; may point at a group label shared by several probes (see below). A series missing this label falls back to `instance_label`, then to `instance` |
 | `source_label` | string | none | Label that holds the probe source identifier |
+| `prometheus_node` | string | none | Node hosting Prometheus. Probes whose source is unknown start from this node instead of the standalone `prometheus` node. Accepts a topology node ID, an IP, a label or a Prometheus instance/hostname |
 | `http_node_label` | string | `upstream` | Label identifying the node for HTTP/HTTPS probes. A series missing this label falls back to `upstream`, then to `parent_label`; a series carrying none of them is skipped |
 | `modules` | map | see below | Blackbox module names queried for each role |
 | `dest_aliases` | map | `{}` | Maps topology node IDs to lists of probe target aliases |
@@ -1012,6 +1014,8 @@ Creates dashed edges. Creates ghost nodes for endpoints unknown to Prometheus.
 
 **Phase 7 — Blackbox probe edges**
 Groups probes by unordered node pair. Probes are deduplicated per real target, so a group `destination_label` keeps one entry per probe. Creates colored edges (green=all UP, red=any DOWN). Bidirectional probes get arrows at both ends.
+
+A probe whose source cannot be resolved (no `source_label`, or a value matching no node) starts from `prometheus_node` when that option is set, otherwise from a standalone `prometheus` node added to the graph. A probe whose source and destination resolve to the same node draws no edge: it stays in that node's tooltip.
 
 **Phase 8 — Frigate cameras**
 Creates one node per camera from `frigate_camera_fps`. Resolves parent using the cameras section, then the `parent` label, then the topology fallback.

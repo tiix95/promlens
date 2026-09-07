@@ -136,6 +136,8 @@ blackbox:                                 # supprimer la section ou mettre enabl
   enabled: true
   destination_label: instance             # label identifiant la cible de la sonde (defaut: instance)
   source_label: job                       # label identifiant la source de la sonde (optionnel)
+  prometheus_node: mon01                  # noeud qui heberge Prometheus : source des sondes
+                                          # dont la source n'est pas resolue (optionnel)
   http_node_label: upstream               # label pour les sondes HTTP/HTTPS (defaut: upstream)
   # modules:                              # noms des modules blackbox interroges, par role
   #   icmp: [icmp]                        # aretes du graphe (defaut: icmp)

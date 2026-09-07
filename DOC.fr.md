@@ -182,6 +182,7 @@ blackbox:
   enabled: true
   destination_label: instance    # label identifiant la cible de la sonde (par defaut: instance)
   source_label: job              # label identifiant la source de la sonde; si absent, affiche "prometheus"
+  prometheus_node: mon01         # noeud de topologie qui heberge Prometheus (source par defaut des sondes)
   http_node_label: upstream      # label des sondes HTTP/HTTPS identifiant le noeud (par defaut: upstream)
   modules:                       # noms des modules blackbox interroges, par role
     icmp: [icmp]                 # defaut
@@ -199,6 +200,7 @@ blackbox:
 | `enabled` | bool | `true` | Active/désactive sans supprimer la section |
 | `destination_label` | string | `instance` | Label qui contient l'identifiant de la cible de sonde ; peut pointer sur un label de groupe partage par plusieurs sondes (voir ci-dessous). Une serie sans ce label retombe sur `instance_label`, puis sur `instance` |
 | `source_label` | string | aucun | Label qui contient l'identifiant de la source de sonde |
+| `prometheus_node` | string | aucun | Noeud qui héberge Prometheus. Les sondes dont la source est inconnue partent de ce noeud au lieu du noeud `prometheus` autonome. Accepte un ID de noeud de topologie, une IP, un label ou une instance/hostname Prometheus |
 | `http_node_label` | string | `upstream` | Label identifiant le noeud pour les sondes HTTP/HTTPS. Une serie sans ce label retombe sur `upstream`, puis sur `parent_label` ; une serie qui n'a aucun des trois est ignoree |
 | `modules` | map | voir ci-dessous | Noms des modules blackbox interrogés pour chaque rôle |
 | `dest_aliases` | map | `{}` | Associe des ID de noeuds de topologie à des listes d'alias de cibles de sonde |
@@ -1012,6 +1014,8 @@ Crée des liens en pointillés. Crée des noeuds fantômes pour les extrémités
 
 **Phase 7 — Liens de sondes blackbox**
 Regroupe les sondes par paire de noeuds non ordonnée. Les sondes sont dédupliquées par cible réelle, donc un `destination_label` de groupe garde une entrée par sonde. Crée des liens colorés (vert=toutes UP, rouge=au moins une DOWN). Les sondes bidirectionnelles obtiennent des flèches aux deux extrémités.
+
+Une sonde dont la source n'est pas résolue (pas de `source_label`, ou une valeur qui ne correspond à aucun noeud) part de `prometheus_node` si l'option est définie, sinon d'un noeud `prometheus` autonome ajouté au graphe. Une sonde dont la source et la destination pointent sur le même noeud ne crée pas de lien : elle reste dans le tooltip de ce noeud.
 
 **Phase 8 — Caméras Frigate**
 Crée un noeud par caméra à partir de `frigate_camera_fps`. Résout le parent via la section cameras, puis le label `parent`, puis le repli sur la topologie.

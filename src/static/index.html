@@ -459,6 +459,7 @@ let directCredentials = false;
 let bbDestLabel    = 'instance';
 let bbSrcLabel     = null;
 let bbDestAliases  = {}; // alias -> node name (from the dest_aliases config)
+let bbPromNode     = null; // node hosting Prometheus (prometheus_node): default probe source
 // Blackbox module names queried per role -- overridden by blackbox.modules
 let bbModules = { icmp: ['icmp'], ssh: ['ssh_banner'], tcp: ['tcp_connect'], http: ['http_2xx', 'https_2xx'] };
 
@@ -849,7 +850,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     const probe = {
       module:       inst.labels.module || '',
       probeSuccess: parseFloat(inst.value) === 1,
-      src:          srcRaw || 'prometheus',
+      src:          srcRaw || bbPromNode || 'prometheus',
       target:       bbInstanceOf(inst) || raw,
     };
     [raw, host].filter(Boolean).forEach(k => {
@@ -857,10 +858,12 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       if (!bbDestByHost[k].some(p => p.module === probe.module && p.src === probe.src && p.target === probe.target))
         bbDestByHost[k].push(probe);
     });
-    // Index by source so outgoing probes can be shown in the source node's tooltip
-    if (srcRaw) {
+    // Index by source so outgoing probes can be shown in the source node's tooltip.
+    // A probe with no source label starts from the configured prometheus_node.
+    const outKeys = (srcRaw ? [srcRaw, srcHost] : [bbPromNode]).filter(Boolean);
+    if (outKeys.length) {
       const outProbe = { module: probe.module, probeSuccess: probe.probeSuccess, destHost: host || raw, target: probe.target };
-      [srcRaw, srcHost].filter(Boolean).forEach(k => {
+      outKeys.forEach(k => {
         if (!bbSrcByHost[k]) bbSrcByHost[k] = [];
         if (!bbSrcByHost[k].some(p => p.module === outProbe.module && p.destHost === outProbe.destHost && p.target === outProbe.target))
           bbSrcByHost[k].push(outProbe);
@@ -953,7 +956,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const c     = p.probeSuccess ? '#2dba6e' : '#f04f4f';
       const icon  = p.probeSuccess ? '✓' : '✗';
       const label = bbIsSsh(p.module) ? 'SSH' : 'ICMP';
-      const src   = bbShortHost(p.src || 'prometheus');
+      const src   = bbShortHost(p.src || bbPromNode || 'prometheus');
       const dst   = p.target ? bbShortHost(p.target) : dest;
       return `&nbsp;&nbsp;<span style="color:${c}">${icon} ${label} ${src} → ${dst}</span>`;
     });
@@ -2014,6 +2017,11 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     return null;
   };
 
+  // Node hosting Prometheus (blackbox.prometheus_node): probes whose source is
+  // unknown start from it instead of the synthetic __prometheus__ node.
+  const promNodeId = bbPromNode ? (hostToNodeId[bbPromNode] || fuzzyNodeResolve(bbPromNode)) : null;
+  if (bbPromNode && !promNodeId) warnings.push(`blackbox.prometheus_node not resolved: "${bbPromNode}"`);
+
   // Grouping by unordered pair: (A,B) and (B,A) -> same key
   // Structure : { nodeA, nodeB, probesAB[], probesBA[], targetsAB[], targetsBA[] }
   const bbByKey = {};
@@ -2025,14 +2033,14 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       if (!targetRaw) return;
 
       // Source resolution
-      let srcId = '__prometheus__', srcName = 'prometheus';
+      let srcId = promNodeId || '__prometheus__';
       if (bbSrcLabel) {
         const srcRaw  = inst.labels[bbSrcLabel] || '';
         const srcLast = srcRaw.lastIndexOf(':');
         const srcHost = srcLast > 0 ? srcRaw.slice(0, srcLast) : srcRaw;
         const resolved = hostToNodeId[srcRaw] || hostToNodeId[srcHost]
                       || fuzzyNodeResolve(srcRaw) || fuzzyNodeResolve(srcHost);
-        if (resolved) { srcId = resolved; srcName = srcHost || srcRaw; }
+        if (resolved) srcId = resolved;
       }
 
       // Dedup on the real probe target, not on the destination label: a group
@@ -2049,6 +2057,9 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
                       || (aliasNode ? hostToNodeId[aliasNode] : null)
                       || fuzzyNodeResolve(targetRaw) || fuzzyNodeResolve(targetHost);
       if (!destId) return;
+      // A node probing itself (Prometheus probing its own host) would draw a
+      // self-loop edge: the probe stays in the node tooltip instead.
+      if (srcId === destId) return;
 
       // Unordered key: (A,B) and (B,A) -> same entry
       const [idA, idB] = [srcId, destId].sort();
@@ -3737,6 +3748,7 @@ async function fetchAll() {
       blackboxEnabled       = d.blackbox != null && d.blackbox?.enabled !== false;
       blackboxHttpNodeLabel = d.blackbox?.http_node_label || 'upstream';
       bbDestLabel = d.blackbox?.destination_label || 'instance'; bbSrcLabel = d.blackbox?.source_label || null;
+      bbPromNode  = d.blackbox?.prometheus_node || null;
       if (d.blackbox?.modules) bbModules = d.blackbox.modules;
       bbDestAliases = {};
       Object.entries(d.blackbox?.dest_aliases || {}).forEach(([node, aliases]) => {
