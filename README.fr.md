@@ -4,7 +4,7 @@
 
 Visualiseur de topologie reseau qui superpose les metriques Prometheus temps reel sur un graphe Vis.js interactif.
 
-Version : **0.18.1**
+Version : **0.19.2**
 
 ## Captures d'ecran
 
@@ -112,6 +112,9 @@ auth:
   token: mytoken                          # bearer uniquement
 
 instance_label: instance                  # label utilise comme identifiant de noeud (defaut: instance)
+parent_label: parent                      # label portant le nom du noeud parent (defaut: parent)
+guest_label: role                         # label marquant un noeud comme invite (defaut: job)
+guest_values: [vm, lxc]                   # valeurs de guest_label traitees comme invite (defaut: [vm])
 direct_credentials: false                 # mode cert uniquement : envoie le certificat client sur les requetes directes
 ssl_verify: true
 timeout: 30                               # timeout HTTP en secondes

@@ -79,6 +79,9 @@ auth:
   token: mytoken      # bearer only
 
 instance_label: instance   # Prometheus label used as node ID (default: instance)
+parent_label: parent       # label holding the parent node name (default: parent)
+guest_label: role          # label marking a node as a guest (default: job)
+guest_values: [vm, lxc]    # values of guest_label treated as guests (default: [vm])
 ssl_verify: true           # set false to skip TLS verification (not recommended)
 timeout: 30                # HTTP timeout in seconds
 proxy: http://proxy:8080   # optional HTTP proxy
@@ -90,6 +93,9 @@ proxy: http://proxy:8080   # optional HTTP proxy
 |---|---|---|---|
 | `url` | string | required | Prometheus base URL |
 | `instance_label` | string | `instance` | Label used to identify each node |
+| `parent_label` | string | `parent` | Label holding the name of the parent node |
+| `guest_label` | string | `job` | Label whose value marks a node as a guest |
+| `guest_values` | list | `[vm]` | Values of `guest_label` that attach the node to `parent_label` |
 | `ssl_verify` | bool | `true` | TLS certificate verification |
 | `timeout` | int | `30` | HTTP request timeout in seconds |
 | `proxy` | string | none | HTTP proxy URL |
@@ -166,7 +172,7 @@ blackbox:
 | `enabled` | bool | `true` | Enable/disable without removing the section |
 | `destination_label` | string | `instance` | Label that holds the probe target identifier |
 | `source_label` | string | none | Label that holds the probe source identifier |
-| `http_node_label` | string | `upstream` | Label identifying the node for HTTP/HTTPS probes |
+| `http_node_label` | string | `upstream` | Label identifying the node for HTTP/HTTPS probes, falling back to `parent_label` when absent |
 | `dest_aliases` | map | `{}` | Maps topology node IDs to lists of probe target aliases |
 
 ### frigate section
@@ -628,6 +634,9 @@ curl -s http://127.0.0.1:8001/api/config | jq .
   "configured": true,
   "auth_type": "none",
   "instance_label": "instance",
+  "parent_label": "parent",
+  "guest_label": "job",
+  "guest_values": ["vm"],
   "direct_credentials": false,
   "refresh": 30,
   "blackbox": {"destination_label": "instance"},
@@ -852,6 +861,8 @@ For each `up{exporter="node"}` instance:
 **Phase 5b — Probe-only nodes**
 Creates lightweight nodes for targets that appear in blackbox/TCP/HTTP probes but have no `node_exporter` instance.
 
+A second pass then links each of these nodes to the node named by its `parent_label`, once every probe-only node is registered so that a probe target can itself be the parent of another. Without a resolvable parent the node stays disconnected and appears in the orphan panel — which is what used to happen to every TCP-only target, since Phase 7 only draws edges for ICMP and SSH probes.
+
 **Phase 6 — WireGuard tunnels**
 Creates dashed edges. Creates ghost nodes for endpoints unknown to Prometheus.
 
@@ -867,7 +878,10 @@ Priority (highest to lowest):
 
 1. `promParentOverride` (internal — zone explicit member overrides)
 2. `network` label matching a declared network by label or CIDR
-3. `job=vm` with `parent` label
+3. `guest_label` matching one of `guest_values`, with a `parent_label` label
+   (defaults: `job=vm` with `parent`). A node whose parent equals its own
+   instance is ignored, so a setup that labels every host with `parent=<itself>`
+   for alert inhibition never produces a self-loop.
 4. `zone` label matching a declared zone
 5. CIDR match in `networks`
 6. Fallback: first `router`, then first `switch` in topology
@@ -1064,13 +1078,15 @@ The top-bar search bar (and its `/` shortcut) now matches zones too, using the s
 
 Nine toggles in the VIEWS dropdown hide guest nodes by kind and state. All are visible (checked) by default. Turning one off hides the matching nodes and every edge touching them.
 
-| Kind | Topology `type` | Toggles |
+| Kind | Topology `type` / `guest_label` value | Toggles |
 |---|---|---|
 | vm | `vm` | VM UNMONITORED / VM DOWN / VM UP |
 | lxc | `lxc` | LXC UNMONITORED / LXC DOWN / LXC UP |
 | pod | `kube` | POD UNMONITORED / POD DOWN / POD UP |
 
 Nodes of any other type (`cloud`, `router`, `firewall`, `switch`, `zigbee`, `wifi`) have no kind and are never affected by these toggles.
+
+A kind is resolved from the topology `type` for nodes declared in `topology.yaml`, and from the `guest_label` value for hosts discovered in Prometheus. With `guest_label: role`, a target labelled `role: vm` therefore gets kind `vm` and obeys the VM toggles, while `role: host` gets no kind.
 
 State is resolved in `buildGraph`:
 

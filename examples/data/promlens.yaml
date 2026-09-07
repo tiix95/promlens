@@ -19,6 +19,9 @@ auth:
 
 # Advanced options
 # instance_label: instance   # Prometheus label used as the node identifier (default: instance)
+# parent_label: parent       # label holding the name of the parent node (default: parent)
+# guest_label: role          # label whose value marks a node as a guest (default: job)
+# guest_values: [vm, lxc]    # values of guest_label attached to their parent (default: [vm])
 # direct_credentials: true   # send credentials (mTLS cert) on direct browser -> Prometheus queries (cert mode only, default: false)
 
 # Frigate NVR exporter (optional)

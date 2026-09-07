@@ -452,6 +452,9 @@ let promUrl           = '';
 let authType          = 'none';
 let appAuthMode       = 'none';
 let instanceLabel     = 'instance';
+let parentLabel       = 'parent';
+let guestLabel        = 'job';   // label whose value marks a node as a guest
+let guestValues       = ['vm'];  // values of guestLabel that attach to `parent`
 let directCredentials = false;
 let bbDestLabel    = 'instance';
 let bbSrcLabel     = null;
@@ -711,6 +714,14 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     return `<span style="color:#7e8aaa">VMs (${vms.length}):</span><br>${rows.join('<br>')}`;
   }
 
+  // Declared parent of a probe target, used by Phase 5b to attach a
+  // probe-only node instead of leaving it floating.
+  const probeParent = {};
+  const rememberProbeParent = (raw, inst) => {
+    const p = inst.labels[parentLabel];
+    if (raw && p && p !== raw && !probeParent[raw]) probeParent[raw] = p;
+  };
+
   // -- TCP connect index : host -> [{ service, port, tool, probeSuccess }]
   const tcpByHost = {};
   const tcpRawKeys = new Set();
@@ -719,7 +730,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const raw  = inst.labels[instLabel] || '';
       const last = raw.lastIndexOf(':');
       const host = last > 0 ? raw.slice(0, last) : raw;
-      if (raw) tcpRawKeys.add(raw);
+      if (raw) { tcpRawKeys.add(raw); rememberProbeParent(raw, inst); }
       const probe = {
         service:      inst.labels.service  || inst.labels.upstream || raw,
         port:         inst.labels.port     || '',
@@ -756,10 +767,13 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
   const httpRawKeys = new Set();
   if (httpData?.instances) {
     httpData.instances.forEach(inst => {
-      const raw  = inst.labels[httpNodeLabel] || '';
+      // A reverse-proxied url has an upstream; one served by the host itself
+      // only carries the parent label. Without this fallback the probe was
+      // silently dropped.
+      const raw  = inst.labels[httpNodeLabel] || inst.labels[parentLabel] || '';
       const last = raw.lastIndexOf(':');
       const host = last > 0 ? raw.slice(0, last) : raw;
-      if (raw) httpRawKeys.add(raw);
+      if (raw) { httpRawKeys.add(raw); rememberProbeParent(raw, inst); }
       const probe = {
         target:       inst.labels[instLabel] || inst.labels.instance || raw,
         probeSuccess: parseFloat(inst.value) === 1,
@@ -795,7 +809,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     const raw  = inst.labels[bbDestLabel] || '';
     const last = raw.lastIndexOf(':');
     const host = last > 0 ? raw.slice(0, last) : raw;
-    if (raw) bbDestRawKeys.add(raw);
+    if (raw) { bbDestRawKeys.add(raw); rememberProbeParent(raw, inst); }
     const srcRaw  = bbSrcLabel ? (inst.labels[bbSrcLabel] || '') : '';
     const srcHost = srcRaw ? (srcRaw.lastIndexOf(':') > 0 ? srcRaw.slice(0, srcRaw.lastIndexOf(':')) : srcRaw) : '';
     const probe = {
@@ -1442,8 +1456,11 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
         zId = zoneParentMap[zId];
       }
     }
-    if (inst.labels.job === 'vm' && inst.labels.parent) {
-      gwId = hostToNodeId[inst.labels.parent] || inst.labels.parent;
+    // A guest attaches to its parent. Some setups label every host with
+    // parent=<itself> (alert inhibition), so never let a node parent itself.
+    const parentRaw = inst.labels[parentLabel];
+    if (parentRaw && parentRaw !== instance && guestValues.includes(inst.labels[guestLabel])) {
+      gwId = hostToNodeId[parentRaw] || parentRaw;
     }
     if (inst.labels.network) {
       const byLabel = networks.find(n => n.label===inst.labels.network || n.cidr===inst.labels.network);
@@ -1486,6 +1503,10 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
 
     nodes.push({
       id: srvId,
+      // Guests discovered from Prometheus honour the VIEWS visibility toggles
+      // the same way as the guests declared in topology.yaml.
+      _kind:  GUEST_KIND[inst.labels[guestLabel]] || null,
+      _state: unknown ? 'unmonitored' : isUp ? 'up' : 'down',
       label: short,
       shape: 'image',
       image: ICON.server(color),
@@ -1759,6 +1780,24 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     // Register in hostToNodeId so Phase 7 (collectBlackbox) can create edges to this node
     hostToNodeId[raw] = probeNodeId;
     if (host !== raw) hostToNodeId[host] = probeNodeId;
+  });
+
+  // Second pass: a probe-only node can declare another probe-only node as its
+  // parent, so the edges are resolved once every node above is registered.
+  // Untagged edges, so these nodes leave the orphan panel.
+  probeOnlyCreated.forEach(raw => {
+    const last        = raw.lastIndexOf(':');
+    const host        = last > 0 ? raw.slice(0, last) : raw;
+    const parentName  = probeParent[raw] || probeParent[host];
+    const parentId    = parentName ? hostToNodeId[parentName] : null;
+    const probeNodeId = hostToNodeId[raw];
+    if (!parentId || !probeNodeId || parentId === probeNodeId) return;
+    edges.push({
+      from: parentId, to: probeNodeId,
+      width: 1, dashes: [4, 3],
+      color: { color: '#3d4560', highlight: '#3d4560', hover: '#3d4560' },
+      smooth: { type: 'curvedCW', roundness: 0.1 },
+    });
   });
 
   // -- Phase 5c: libvirt VM nodes (VMs without node_exporter not yet in the graph) --
@@ -3596,6 +3635,9 @@ async function fetchAll() {
   try {
     const cfgR = await fetch('/api/config');
     if (cfgR.ok) { const d = await cfgR.json(); promUrl = /^https?:\/\//i.test(d.url || '') ? (d.url || '') : ''; authType = d.auth_type || 'none'; instanceLabel = d.instance_label || 'instance';
+      parentLabel = d.parent_label || 'parent';
+      guestLabel  = d.guest_label  || 'job';
+      guestValues = Array.isArray(d.guest_values) && d.guest_values.length ? d.guest_values : ['vm'];
       directCredentials = !!d.direct_credentials;
       appAuthMode = d.app_auth_mode || 'none';
       if (appAuthMode !== 'none' && d.app_auth_user) {
