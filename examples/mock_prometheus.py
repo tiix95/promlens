@@ -273,10 +273,11 @@ QUERIES = {
     'node_load1': lambda: _host_samples("load1"),
     'node_boot_time_seconds': lambda: _host_samples("boot_time"),
     'node_systemd_unit_state{state="failed"} == 1': _systemd_samples,
-    'probe_success{module="icmp"}': lambda: _bb_samples("icmp"),
-    'probe_success{module="ssh_banner"}': lambda: _bb_samples("ssh_banner"),
-    'probe_success{module="tcp_connect"}': _tcp_samples,
-    'probe_success{module=~"https?_2xx"}': _http_samples,
+    # Built from blackbox.modules, so the selectors follow the default module names
+    'probe_success{module=~"icmp"}': lambda: _bb_samples("icmp"),
+    'probe_success{module=~"ssh_banner"}': lambda: _bb_samples("ssh_banner"),
+    'probe_success{module=~"tcp_connect"}': _tcp_samples,
+    'probe_success{module=~"http_2xx|https_2xx"}': _http_samples,
     'libvirt_domain_info_state': _libvirt_samples,
     'frigate_camera_fps': _frigate_samples,
 }

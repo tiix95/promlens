@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.18.1**
+Version: **0.20.0**
 
 ---
 
@@ -153,7 +153,7 @@ Remove the section entirely or set `enabled: false` to disable.
 
 ### blackbox section
 
-Enables blackbox exporter probe visualization. Supported modules: `icmp`, `ssh_banner`, `tcp_connect`, `https?_2xx`.
+Enables blackbox exporter probe visualization. ProMLens queries `probe_success` for four fixed roles, each rendered differently. The module names behind each role are configurable through `modules`; the roles themselves are not.
 
 ```yaml
 blackbox:
@@ -161,6 +161,11 @@ blackbox:
   destination_label: instance    # label identifying the probe target (default: instance)
   source_label: job              # label identifying the probe source; if absent, shows as "prometheus"
   http_node_label: upstream      # label for HTTP/HTTPS probes to identify the node (default: upstream)
+  modules:                       # blackbox module names queried, per role
+    icmp: [icmp]                 # default
+    ssh:  [ssh_banner]           # default
+    tcp:  [tcp_connect]          # default
+    http: [http_2xx, https_2xx]  # default
   dest_aliases:
     mynode:                      # topology node ID
       - alias-one                # Prometheus label values that map to mynode
@@ -173,7 +178,37 @@ blackbox:
 | `destination_label` | string | `instance` | Label that holds the probe target identifier |
 | `source_label` | string | none | Label that holds the probe source identifier |
 | `http_node_label` | string | `upstream` | Label identifying the node for HTTP/HTTPS probes, falling back to `parent_label` when absent |
+| `modules` | map | see below | Blackbox module names queried for each role |
 | `dest_aliases` | map | `{}` | Maps topology node IDs to lists of probe target aliases |
+
+#### blackbox.modules
+
+| Role | Default modules | Rendering |
+|---|---|---|
+| `icmp` | `icmp` | Probe edges in the graph, toggled by the ICMP filter button |
+| `ssh` | `ssh_banner` | Probe edges in the graph, toggled by the SSH filter button |
+| `tcp` | `tcp_connect` | TCP service status in node tooltips |
+| `http` | `http_2xx`, `https_2xx` | HTTP/HTTPS target status in node tooltips |
+
+Rules:
+
+- Each role accepts a single string (`ssh: ssh_banner`) or a list of module names.
+- An omitted role keeps its default. An omitted `modules` key keeps every default.
+- An empty list disables the role entirely: its query is skipped.
+- Several modules on one role are merged into a single query: `probe_success{module=~"http_2xx|https_2xx"}`.
+- Module names are validated against `^[A-Za-z0-9_.:?*+|()\[\]-]+$`. An invalid entry is logged as a warning and ignored. Regex metacharacters are allowed, so `http: ["https?_2xx"]` is a valid one-entry equivalent.
+
+Example: probe HTTP through a custom module name and disable the TCP tooltip section.
+
+```yaml
+blackbox:
+  enabled: true
+  modules:
+    http: [http_2xx_internal, https_2xx_internal]
+    tcp:  []                     # no TCP query at all
+```
+
+The resolved map (config merged with the defaults) is returned by `GET /api/config` as `blackbox.modules`.
 
 ### frigate section
 
@@ -639,7 +674,15 @@ curl -s http://127.0.0.1:8001/api/config | jq .
   "guest_values": ["vm"],
   "direct_credentials": false,
   "refresh": 30,
-  "blackbox": {"destination_label": "instance"},
+  "blackbox": {
+    "destination_label": "instance",
+    "modules": {
+      "icmp": ["icmp"],
+      "ssh":  ["ssh_banner"],
+      "tcp":  ["tcp_connect"],
+      "http": ["http_2xx", "https_2xx"]
+    }
+  },
   "libvirt": null,
   "frigate": {"camera_url": "https://frigate.example.com"},
   "app_auth_mode": "none",
@@ -648,6 +691,8 @@ curl -s http://127.0.0.1:8001/api/config | jq .
 ```
 
 When a section (`blackbox`, `libvirt`, `frigate`) is absent from `promlens.yaml`, it returns `null`. When present but empty, it returns `{}`. The frontend treats `null` as disabled and anything else as enabled (unless `enabled: false` is set).
+
+When the `blackbox` section is present, `blackbox.modules` is always returned with the four roles, resolved from the config merged with the defaults. A role configured with an empty list is returned as an empty list, and the frontend skips its query.
 
 ### GET /api/topology
 
@@ -827,15 +872,15 @@ Every refresh cycle runs these in parallel with `Promise.all`:
 | 12 | Prometheus | `node_load1` | 1-minute load average |
 | 13 | Prometheus | `node_boot_time_seconds` | Boot time (uptime calculation) |
 | 14 | Prometheus | `node_systemd_unit_state{state="failed"} == 1` | Failed systemd units |
-| 15 | Prometheus | `probe_success{module="icmp"}` | ICMP probe results (blackbox only) |
-| 16 | Prometheus | `probe_success{module="ssh_banner"}` | SSH probe results (blackbox only) |
-| 17 | Prometheus | `probe_success{module="tcp_connect"}` | TCP connect probe results (blackbox only) |
-| 18 | Prometheus | `probe_success{module=~"https?_2xx"}` | HTTP/HTTPS probe results (blackbox only) |
+| 15 | Prometheus | `probe_success{module=~"<blackbox.modules.icmp>"}` | ICMP probe results, blackbox only (default module: `icmp`) |
+| 16 | Prometheus | `probe_success{module=~"<blackbox.modules.ssh>"}` | SSH probe results, blackbox only (default module: `ssh_banner`) |
+| 17 | Prometheus | `probe_success{module=~"<blackbox.modules.tcp>"}` | TCP connect probe results, blackbox only (default module: `tcp_connect`) |
+| 18 | Prometheus | `probe_success{module=~"<blackbox.modules.http>"}` | HTTP/HTTPS probe results, blackbox only (default modules: `http_2xx`, `https_2xx`) |
 | 19 | Prometheus | `libvirt_domain_info_state` | VM state on hypervisors (libvirt only) |
 | 20 | Prometheus | `frigate_camera_fps` | Camera online status (frigate only) |
 | 21 | Backend / Prometheus | `GET /api/alerts` (proxied) or `GET /api/v1/alerts` (cert mode, direct) | Firing Prometheus alerts |
 
-Queries 15-20 are skipped (Promise resolves immediately) when their integration is disabled. Query 21 always runs; it returns an empty array on error so a Prometheus alertmanager outage does not block the graph.
+Queries 15-20 are skipped (Promise resolves immediately) when their integration is disabled. Queries 15-18 are also skipped when their role has an empty module list in [blackbox.modules](#blackboxmodules). Query 21 always runs; it returns an empty array on error so a Prometheus alertmanager outage does not block the graph.
 
 ### buildGraph phases
 

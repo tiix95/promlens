@@ -459,6 +459,27 @@ let directCredentials = false;
 let bbDestLabel    = 'instance';
 let bbSrcLabel     = null;
 let bbDestAliases  = {}; // alias -> node name (from the dest_aliases config)
+// Blackbox module names queried per role -- overridden by blackbox.modules
+let bbModules = { icmp: ['icmp'], ssh: ['ssh_banner'], tcp: ['tcp_connect'], http: ['http_2xx', 'https_2xx'] };
+
+// PromQL selector for a role; null when no module is configured for it
+function bbSelector(role) {
+  const list = bbModules[role] || [];
+  return list.length ? `probe_success{module=~"${list.join('|')}"}` : null;
+}
+
+// Tests whether a module label belongs to a role. Module names are configurable,
+// so "is this an SSH probe?" is answered from the list, not from a hardcoded name.
+function bbModuleMatcher(role) {
+  const list = bbModules[role] || [];
+  if (!list.length) return () => false;
+  try {
+    const re = new RegExp(`^(?:${list.join('|')})$`);
+    return m => re.test(m || '');
+  } catch (_) {
+    return m => list.includes(m);
+  }
+}
 const $ = id => document.getElementById(id);
 
 let thresholdColors = true;
@@ -802,6 +823,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
   }
 
   // -- ICMP/SSH probe index : host -> [{ module, probeSuccess, src }]
+  const bbIsSsh = bbModuleMatcher('ssh');
   const bbDestByHost = {};
   const bbSrcByHost  = {}; // src -> [{ module, probeSuccess, destHost }] -- only when source_label configured
   const bbDestRawKeys = new Set();
@@ -890,7 +912,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const rows = outgoing.map(p => {
         const c     = p.probeSuccess ? '#2dba6e' : '#f04f4f';
         const icon  = p.probeSuccess ? '✓' : '✗';
-        const label = p.module === 'ssh_banner' ? 'SSH' : 'ICMP';
+        const label = bbIsSsh(p.module) ? 'SSH' : 'ICMP';
         const dest = esc((p.destHost || '').replace(/:\d+$/, ''));
         return `&nbsp;&nbsp;<span style="color:${c}">${icon} ${label} ${self} → ${dest}</span>`;
       });
@@ -903,7 +925,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     const rows = probes.map(p => {
       const c     = p.probeSuccess ? '#2dba6e' : '#f04f4f';
       const icon  = p.probeSuccess ? '✓' : '✗';
-      const label = p.module === 'ssh_banner' ? 'SSH' : 'ICMP';
+      const label = bbIsSsh(p.module) ? 'SSH' : 'ICMP';
       const src   = esc((p.src || 'prometheus').replace(/:\d+$/, ''));
       return `&nbsp;&nbsp;<span style="color:${c}">${icon} ${label} ${src} → ${dest}</span>`;
     });
@@ -1967,7 +1989,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
   // Grouping by unordered pair: (A,B) and (B,A) -> same key
   // Structure : { nodeA, nodeB, probesAB[], probesBA[], targetsAB[], targetsBA[] }
   const bbByKey = {};
-  const collectBlackbox = (data, module) => {
+  const collectBlackbox = (data, role) => {
     if (!data?.instances?.length) return;
     const seen = new Set();
     data.instances.forEach(inst => {
@@ -2011,12 +2033,13 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const probeList  = fromA ? e.probesAB  : e.probesBA;
       const targetList = fromA ? e.targetsAB : e.targetsBA;
       if (!targetList.includes(targetRaw)) targetList.push(targetRaw);
-      probeList.push({ module, probeUp: parseFloat(inst.value) === 1, target: targetRaw });
+      // module = actual probe name (display), role = configured role (filters)
+      probeList.push({ module: inst.labels.module || role, role, probeUp: parseFloat(inst.value) === 1, target: targetRaw });
     });
   };
 
   collectBlackbox(blackboxData,    'icmp');
-  collectBlackbox(blackboxSshData, 'ssh_banner');
+  collectBlackbox(blackboxSshData, 'ssh');
 
   // Helpers reused in the render loop
   const bbNodeName = (nodeId) => {
@@ -3377,7 +3400,7 @@ function showLinks(edges, nodes) {
     if (e.id?.startsWith('__wg__'))
       tag = `<span class="links-item-tag" style="color:#4a8adf">WG</span>`;
     else if (e._bbProbes) {
-      const m = [...new Set(e._bbProbes.map(p => p.module === 'ssh_banner' ? 'SSH' : 'ICMP'))].join('/');
+      const m = [...new Set(e._bbProbes.map(p => p.role === 'ssh' ? 'SSH' : 'ICMP'))].join('/');
       tag = `<span class="links-item-tag" style="color:var(--text2)">${m}</span>`;
     }
     const arr = (e.id?.startsWith('__wg__') || e._bbProbes) ? '→' : '↔';
@@ -3437,7 +3460,7 @@ function applyRender(focusAfter = null) {
   const bbHide = e => {
     if (!e._bbProbes) return false;
     return e._bbProbes.every(p =>
-      p.probeUp && (p.module === 'icmp' ? blackboxUpHidden : p.module === 'ssh_banner' ? blackboxSshUpHidden : false)
+      p.probeUp && (p.role === 'icmp' ? blackboxUpHidden : p.role === 'ssh' ? blackboxSshUpHidden : false)
     );
   };
   visEdges = visEdges.filter(e => !bbHide(e));
@@ -3648,6 +3671,7 @@ async function fetchAll() {
       blackboxEnabled       = d.blackbox != null && d.blackbox?.enabled !== false;
       blackboxHttpNodeLabel = d.blackbox?.http_node_label || 'upstream';
       bbDestLabel = d.blackbox?.destination_label || 'instance'; bbSrcLabel = d.blackbox?.source_label || null;
+      if (d.blackbox?.modules) bbModules = d.blackbox.modules;
       bbDestAliases = {};
       Object.entries(d.blackbox?.dest_aliases || {}).forEach(([node, aliases]) => {
         (aliases || []).forEach(alias => { bbDestAliases[alias] = node; });
@@ -3680,6 +3704,10 @@ async function fetchAll() {
 
   try {
     const post = makePost();
+    const bbQuery = role => {
+      const q = bbSelector(role);
+      return blackboxEnabled && q ? post(q) : Promise.resolve({ ok: false });
+    };
     const [topoR, promR, rxR, txR, speedR, unameR, cpuR, memAvailR, memTotalR, diskAvailR, diskTotalR, loadR, bootR, systemdR, blackboxR, blackboxSshR, blackboxTcpR, blackboxHttpR, libvirtR, frigateR, alertsR] = await Promise.all([
       fetch('/api/topology'),
       post('up{exporter="node"}'),
@@ -3695,10 +3723,10 @@ async function fetchAll() {
       post('node_load1'),
       post('node_boot_time_seconds'),
       post('node_systemd_unit_state{state="failed"} == 1'),
-      blackboxEnabled ? post('probe_success{module="icmp"}')        : Promise.resolve({ ok: false }),
-      blackboxEnabled ? post('probe_success{module="ssh_banner"}')  : Promise.resolve({ ok: false }),
-      blackboxEnabled ? post('probe_success{module="tcp_connect"}')   : Promise.resolve({ ok: false }),
-      blackboxEnabled ? post('probe_success{module=~"https?_2xx"}')   : Promise.resolve({ ok: false }),
+      bbQuery('icmp'),
+      bbQuery('ssh'),
+      bbQuery('tcp'),
+      bbQuery('http'),
       libvirtEnabled  ? post(libvirtMetric) : Promise.resolve({ ok: false }),
       frigateEnabled  ? post('frigate_camera_fps')        : Promise.resolve({ ok: false }),
       authType === 'cert'

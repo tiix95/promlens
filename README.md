@@ -4,7 +4,7 @@
 
 Network topology visualizer that overlays real-time Prometheus metrics on an interactive Vis.js graph.
 
-Version: **0.19.2**
+Version: **0.20.0**
 
 ## Screenshots
 
@@ -135,6 +135,12 @@ blackbox:                                 # remove section or set enabled: false
   destination_label: instance             # label identifying the probe target (default: instance)
   source_label: job                       # label identifying the probe source (optional)
   http_node_label: upstream               # label for HTTP/HTTPS probes (default: upstream)
+  # modules:                              # blackbox module names queried, per role
+  #   icmp: [icmp]                        # graph edges (default: icmp)
+  #   ssh:  [ssh_banner]                  # graph edges (default: ssh_banner)
+  #   tcp:  [tcp_connect]                 # node tooltip (default: tcp_connect)
+  #   http: [http_2xx, https_2xx]         # node tooltip (default: http_2xx, https_2xx)
+  #   # a single string is accepted; an empty list disables the role
   dest_aliases:                           # alias -> node name for unresolvable probe targets
     mynode:
       - alias-1
@@ -208,7 +214,7 @@ Full reference and examples: see [DOC.md](DOC.md)
 - Network links — RX/TX per interface, colored by utilization
 - WireGuard tunnels — dashed links with dedicated interface metrics
 - Zone bubbles — visual grouping by Prometheus `zone` label
-- Blackbox probes — ICMP, SSH, TCP connect, HTTP/HTTPS probe links and per-node status
+- Blackbox probes — ICMP, SSH, TCP connect, HTTP/HTTPS probe links and per-node status; module names configurable via `blackbox.modules`
 - Frigate cameras — one node per camera, green=online, red=offline
 - Libvirt VMs — VM list with state in hypervisor tooltips
 - Guest visibility — hide VM / LXC / POD nodes per state (unmonitored, down, up) from the VIEWS menu

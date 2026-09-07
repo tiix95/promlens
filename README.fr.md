@@ -4,7 +4,7 @@
 
 Visualiseur de topologie reseau qui superpose les metriques Prometheus temps reel sur un graphe Vis.js interactif.
 
-Version : **0.19.2**
+Version : **0.20.0**
 
 ## Captures d'ecran
 
@@ -136,6 +136,12 @@ blackbox:                                 # supprimer la section ou mettre enabl
   destination_label: instance             # label identifiant la cible de la sonde (defaut: instance)
   source_label: job                       # label identifiant la source de la sonde (optionnel)
   http_node_label: upstream               # label pour les sondes HTTP/HTTPS (defaut: upstream)
+  # modules:                              # noms des modules blackbox interroges, par role
+  #   icmp: [icmp]                        # aretes du graphe (defaut: icmp)
+  #   ssh:  [ssh_banner]                  # aretes du graphe (defaut: ssh_banner)
+  #   tcp:  [tcp_connect]                 # tooltip du noeud (defaut: tcp_connect)
+  #   http: [http_2xx, https_2xx]         # tooltip du noeud (defaut: http_2xx, https_2xx)
+  #   # une chaine seule est acceptee, une liste vide desactive le role
   dest_aliases:                           # alias -> nom de noeud pour les cibles non resolvables
     mynode:
       - alias-1
@@ -209,7 +215,7 @@ Reference complete et exemples : voir [DOC.fr.md](DOC.fr.md)
 - Liens reseau -- RX/TX par interface, colores selon le taux d'utilisation
 - Tunnels WireGuard -- liens pointilles avec leurs metriques d'interface dediees
 - Bulles de zone -- regroupement visuel par label Prometheus `zone`
-- Sondes blackbox -- liens de sonde ICMP, SSH, TCP connect, HTTP/HTTPS et etat par noeud
+- Sondes blackbox -- liens de sonde ICMP, SSH, TCP connect, HTTP/HTTPS et etat par noeud ; noms des modules configurables via `blackbox.modules`
 - Cameras Frigate -- un noeud par camera, vert=en ligne, rouge=hors ligne
 - VMs libvirt -- liste des VMs avec leur etat dans les tooltips de l'hyperviseur
 - Visibilite des invites -- masquer les noeuds VM / LXC / POD par etat (unmonitored, down, up) depuis le menu VIEWS

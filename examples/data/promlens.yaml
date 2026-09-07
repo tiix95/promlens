@@ -46,6 +46,12 @@ blackbox:
   source_label: job         # label identifying the source node; if absent or unresolved -> prometheus
   # enabled: false          # set to false to disable without removing the section
   # http_node_label: upstream  # label identifying the node for http/https_2xx probes (default: upstream)
+  # modules:                  # blackbox module names queried, per role
+  #   icmp: [icmp]            # ICMP probes -> graph edges (default: icmp)
+  #   ssh:  [ssh_banner]      # SSH probes  -> graph edges (default: ssh_banner)
+  #   tcp:  [tcp_connect]     # TCP probes  -> node tooltip (default: tcp_connect)
+  #   http: [http_2xx, https_2xx]  # HTTP probes -> node tooltip (default: http_2xx, https_2xx)
+  #   # a single string is accepted, an empty list disables the role
   # dest_aliases:           # unresolvable destination aliases -> target node
   #   host1:
   #     - alias-1

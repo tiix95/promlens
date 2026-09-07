@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.18.1**
+Version : **0.20.0**
 
 ---
 
@@ -153,7 +153,7 @@ Supprimez la section entièrement ou mettez `enabled: false` pour désactiver.
 
 ### Section blackbox
 
-Active la visualisation des sondes du blackbox exporter. Modules supportés : `icmp`, `ssh_banner`, `tcp_connect`, `https?_2xx`.
+Active la visualisation des sondes du blackbox exporter. ProMLens interroge `probe_success` pour quatre rôles fixes, chacun rendu différemment. Les noms des modules derrière chaque rôle sont configurables via `modules` ; les rôles eux-mêmes ne le sont pas.
 
 ```yaml
 blackbox:
@@ -161,6 +161,11 @@ blackbox:
   destination_label: instance    # label identifiant la cible de la sonde (par defaut: instance)
   source_label: job              # label identifiant la source de la sonde; si absent, affiche "prometheus"
   http_node_label: upstream      # label des sondes HTTP/HTTPS identifiant le noeud (par defaut: upstream)
+  modules:                       # noms des modules blackbox interroges, par role
+    icmp: [icmp]                 # defaut
+    ssh:  [ssh_banner]           # defaut
+    tcp:  [tcp_connect]          # defaut
+    http: [http_2xx, https_2xx]  # defaut
   dest_aliases:
     mynode:                      # ID de noeud de topologie
       - alias-one                # valeurs de label Prometheus associees a mynode
@@ -173,7 +178,37 @@ blackbox:
 | `destination_label` | string | `instance` | Label qui contient l'identifiant de la cible de sonde |
 | `source_label` | string | aucun | Label qui contient l'identifiant de la source de sonde |
 | `http_node_label` | string | `upstream` | Label identifiant le noeud pour les sondes HTTP/HTTPS, avec repli sur `parent_label` s'il est absent |
+| `modules` | map | voir ci-dessous | Noms des modules blackbox interrogés pour chaque rôle |
 | `dest_aliases` | map | `{}` | Associe des ID de noeuds de topologie à des listes d'alias de cibles de sonde |
+
+#### blackbox.modules
+
+| Rôle | Modules par défaut | Rendu |
+|---|---|---|
+| `icmp` | `icmp` | Arêtes de sonde dans le graphe, filtrées par le bouton ICMP |
+| `ssh` | `ssh_banner` | Arêtes de sonde dans le graphe, filtrées par le bouton SSH |
+| `tcp` | `tcp_connect` | État des services TCP dans les tooltips de noeud |
+| `http` | `http_2xx`, `https_2xx` | État des cibles HTTP/HTTPS dans les tooltips de noeud |
+
+Règles :
+
+- Chaque rôle accepte une chaîne seule (`ssh: ssh_banner`) ou une liste de noms de modules.
+- Un rôle omis garde son défaut. Une clé `modules` absente garde tous les défauts.
+- Une liste vide désactive complètement le rôle : sa requête est ignorée.
+- Plusieurs modules sur un rôle sont fusionnés en une seule requête : `probe_success{module=~"http_2xx|https_2xx"}`.
+- Les noms de modules sont validés contre `^[A-Za-z0-9_.:?*+|()\[\]-]+$`. Une entrée invalide est ignorée avec un warning dans les logs. Les métacaractères de regex sont autorisés, donc `http: ["https?_2xx"]` est un équivalent valide en une entrée.
+
+Exemple : interroger le HTTP via un nom de module personnalisé et désactiver la section TCP des tooltips.
+
+```yaml
+blackbox:
+  enabled: true
+  modules:
+    http: [http_2xx_internal, https_2xx_internal]
+    tcp:  []                     # aucune requete TCP
+```
+
+La map résolue (config fusionnée avec les défauts) est renvoyée par `GET /api/config` dans `blackbox.modules`.
 
 ### Section frigate
 
@@ -639,7 +674,15 @@ curl -s http://127.0.0.1:8001/api/config | jq .
   "guest_values": ["vm"],
   "direct_credentials": false,
   "refresh": 30,
-  "blackbox": {"destination_label": "instance"},
+  "blackbox": {
+    "destination_label": "instance",
+    "modules": {
+      "icmp": ["icmp"],
+      "ssh":  ["ssh_banner"],
+      "tcp":  ["tcp_connect"],
+      "http": ["http_2xx", "https_2xx"]
+    }
+  },
   "libvirt": null,
   "frigate": {"camera_url": "https://frigate.example.com"},
   "app_auth_mode": "none",
@@ -648,6 +691,8 @@ curl -s http://127.0.0.1:8001/api/config | jq .
 ```
 
 Quand une section (`blackbox`, `libvirt`, `frigate`) est absente de `promlens.yaml`, elle renvoie `null`. Quand elle est présente mais vide, elle renvoie `{}`. Le frontend traite `null` comme désactivé et toute autre valeur comme activée (sauf si `enabled: false` est défini).
+
+Quand la section `blackbox` est présente, `blackbox.modules` est toujours renvoyée avec les quatre rôles, résolus depuis la config fusionnée avec les défauts. Un rôle configuré avec une liste vide est renvoyé comme liste vide, et le frontend ignore sa requête.
 
 ### GET /api/topology
 
@@ -827,15 +872,15 @@ Chaque cycle de rafraîchissement exécute celles-ci en parallèle avec `Promise
 | 12 | Prometheus | `node_load1` | Charge moyenne sur 1 minute |
 | 13 | Prometheus | `node_boot_time_seconds` | Heure de démarrage (calcul de l'uptime) |
 | 14 | Prometheus | `node_systemd_unit_state{state="failed"} == 1` | Units systemd en échec |
-| 15 | Prometheus | `probe_success{module="icmp"}` | Résultats des sondes ICMP (blackbox uniquement) |
-| 16 | Prometheus | `probe_success{module="ssh_banner"}` | Résultats des sondes SSH (blackbox uniquement) |
-| 17 | Prometheus | `probe_success{module="tcp_connect"}` | Résultats des sondes TCP connect (blackbox uniquement) |
-| 18 | Prometheus | `probe_success{module=~"https?_2xx"}` | Résultats des sondes HTTP/HTTPS (blackbox uniquement) |
+| 15 | Prometheus | `probe_success{module=~"<blackbox.modules.icmp>"}` | Résultats des sondes ICMP, blackbox uniquement (module par défaut : `icmp`) |
+| 16 | Prometheus | `probe_success{module=~"<blackbox.modules.ssh>"}` | Résultats des sondes SSH, blackbox uniquement (module par défaut : `ssh_banner`) |
+| 17 | Prometheus | `probe_success{module=~"<blackbox.modules.tcp>"}` | Résultats des sondes TCP connect, blackbox uniquement (module par défaut : `tcp_connect`) |
+| 18 | Prometheus | `probe_success{module=~"<blackbox.modules.http>"}` | Résultats des sondes HTTP/HTTPS, blackbox uniquement (modules par défaut : `http_2xx`, `https_2xx`) |
 | 19 | Prometheus | `libvirt_domain_info_state` | État des VM sur les hyperviseurs (libvirt uniquement) |
 | 20 | Prometheus | `frigate_camera_fps` | État en ligne des caméras (frigate uniquement) |
 | 21 | Backend / Prometheus | `GET /api/alerts` (relayé) ou `GET /api/v1/alerts` (mode cert, direct) | Alertes Prometheus actives |
 
-Les requêtes 15 à 20 sont ignorées (la Promise se résout immédiatement) quand leur intégration est désactivée. La requête 21 s'exécute toujours ; elle renvoie un tableau vide en cas d'erreur, de sorte qu'une panne de l'alertmanager Prometheus ne bloque pas le graphe.
+Les requêtes 15 à 20 sont ignorées (la Promise se résout immédiatement) quand leur intégration est désactivée. Les requêtes 15 à 18 sont également ignorées quand leur rôle a une liste de modules vide dans [blackbox.modules](#blackboxmodules). La requête 21 s'exécute toujours ; elle renvoie un tableau vide en cas d'erreur, de sorte qu'une panne de l'alertmanager Prometheus ne bloque pas le graphe.
 
 ### Phases de buildGraph
 

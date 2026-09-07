@@ -3,6 +3,7 @@ import json
 import logging
 import math
 import os
+import re
 import time
 import traceback
 from collections import deque
@@ -367,6 +368,48 @@ async def get_alerts(request: Request):
         return []
 
 
+# Blackbox module names queried for each probe role. Each role keeps its own
+# rendering (icmp/ssh draw edges, tcp/http fill node tooltips), only the module
+# names are configurable.
+_BLACKBOX_DEFAULT_MODULES = {
+    "icmp": ["icmp"],
+    "ssh":  ["ssh_banner"],
+    "tcp":  ["tcp_connect"],
+    "http": ["http_2xx", "https_2xx"],
+}
+
+# Module names end up inside probe_success{module=~"..."}: restrict them to safe
+# regex characters so a config entry cannot break out of the PromQL matcher.
+_MODULE_NAME_RE = re.compile(r"^[A-Za-z0-9_.:?*+|()\[\]-]+$")
+
+
+def _blackbox_modules(section: dict) -> dict[str, list[str]]:
+    """Merge blackbox.modules over the defaults. An empty list disables the role."""
+    configured = section.get("modules") or {}
+    if not isinstance(configured, dict):
+        logger.warning("blackbox.modules must be a mapping - using defaults")
+        configured = {}
+
+    modules: dict[str, list[str]] = {}
+    for role, default in _BLACKBOX_DEFAULT_MODULES.items():
+        if role not in configured:
+            modules[role] = list(default)
+            continue
+        raw = configured[role]
+        names = raw if isinstance(raw, list) else [raw]
+        valid = []
+        for name in names:
+            name = str(name).strip()
+            if not name:
+                continue
+            if not _MODULE_NAME_RE.match(name):
+                logger.warning("blackbox.modules.%s: ignoring invalid module name %r", role, name)
+                continue
+            valid.append(name)
+        modules[role] = valid
+    return modules
+
+
 @app.get("/api/config")
 async def get_config(request: Request):
     if not CONFIG_FILE.exists():
@@ -392,6 +435,8 @@ async def get_config(request: Request):
             v = data[key]
             return v if isinstance(v, dict) else {}
         blackbox = _section("blackbox")
+        if blackbox is not None:
+            blackbox = {**blackbox, "modules": _blackbox_modules(blackbox)}
         libvirt  = _section("libvirt")
         frigate  = _section("frigate")
         app_auth_mode = load_app_auth_config().mode
