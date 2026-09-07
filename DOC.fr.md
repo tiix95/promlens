@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.17.0**
+Version : **0.18.0**
 
 ---
 
@@ -974,6 +974,7 @@ ifaceRatio = max(rx, tx) / speed
 | Intervalle de rafraîchissement | 10s / 30s / 1m / 5m / off |
 | Recherche | Cible et fait clignoter un noeud ou une zone par libellé ou par ID (appuyez sur `/` pour placer le focus dans le champ) |
 | Fenêtre de recherche | `Ctrl+F` / `Cmd+F` ouvre une recherche de type palette de commandes sur les noeuds et zones visibles |
+| Fenêtre d'aide | `Ctrl+H` / `Cmd+H` ouvre la liste des raccourcis clavier |
 
 **Clic sur un noeud :** un simple clic met le noeud en avant (masque les liens non liés). Un double-clic ouvre la fenêtre de détail. Si `camera_url` est configuré, cliquer sur un noeud caméra Frigate ouvre `camera_url/#camera_name` dans une nouvelle fenêtre.
 
@@ -981,6 +982,41 @@ ifaceRatio = max(rx, tx) / speed
 - Lien blackbox : ouvre le graphe Prometheus de `probe_success{instance="..."}`.
 - Tunnel WireGuard : ouvre le graphe Prometheus des RX/TX de l'interface WireGuard.
 - Lien serveur normal : ouvre le graphe Prometheus des RX/TX de l'instance serveur.
+
+#### Raccourcis clavier
+
+Six raccourcis globaux utilisent `Ctrl` sur Linux/Windows et `Cmd` sur macOS. Tous remplacent le comportement par défaut du navigateur.
+
+| Raccourci | Action | Page des alertes |
+|---|---|---|
+| `Ctrl+F` | Ouvre la fenêtre de recherche | ignoré |
+| `Ctrl+S` | Sauvegarde le layout | ignoré |
+| `Ctrl+M` | Bascule le mode sélection | ignoré |
+| `Ctrl+A` | Ajuste la vue (fit) | ignoré |
+| `Ctrl+R` | Rafraîchit immédiatement | actif |
+| `Ctrl+H` | Ouvre la fenêtre d'aide des raccourcis clavier | actif |
+
+Chaque raccourci déclenche le bouton correspondant de la barre d'outils (`saveLayoutBtn`, `selectModeBtn`, `fitBtn`, `refreshBtn`) : un raccourci ne peut donc pas diverger du comportement de son bouton.
+
+Toutes les associations sont définies dans une unique table `SHORTCUTS` dans `src/static/index.html`. Cette table alimente à la fois le gestionnaire de touches et la fenêtre d'aide : la liste affichée correspond donc toujours aux associations réelles.
+
+**Exceptions :**
+
+- `Ctrl+A` n'est pas intercepté tant qu'un champ de saisie a le focus. Il y conserve son sens natif « tout sélectionner ».
+- `Ctrl+F`, `Ctrl+S`, `Ctrl+M` et `Ctrl+A` sont marqués `mapOnly` et sont ignorés tant que la page des alertes Prometheus est ouverte. `Ctrl+R` et `Ctrl+H` fonctionnent partout.
+
+**Fenêtre d'aide :**
+
+`Ctrl+H` ouvre `<dialog id="helpModal">`, intitulée « Keyboard shortcuts ». Elle liste toutes les entrées de la table `SHORTCUTS`, plus deux lignes pour les touches gérées par leurs propres écouteurs :
+
+| Touche | Action |
+|---|---|
+| `/` | Place le focus dans le champ de recherche du bandeau |
+| `esc` | Ferme une fenêtre, ou annule la mise en avant du noeud |
+
+Échap ferme la fenêtre d'aide, sans annuler en plus la mise en avant du noeud.
+
+La fenêtre de recherche et la fenêtre d'aide ne se superposent jamais : ouvrir l'une ferme l'autre.
 
 #### Fenêtre de recherche
 

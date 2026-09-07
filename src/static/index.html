@@ -187,7 +187,15 @@
     .sm-item.sel .sm-kind{color:var(--accent)}
     .sm-empty{padding:14px 10px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text2)}
     .sm-ftr{display:flex;gap:14px;padding:8px 14px;border-top:1px solid var(--border);font-family:var(--mono);font-size:9px;color:var(--text2)}
-    .sm-ftr kbd{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:1px 4px;font-family:var(--mono);font-size:9px;color:var(--text1)}
+    kbd{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:1px 4px;font-family:var(--mono);font-size:9px;color:var(--text1)}
+
+    /* -- HELP MODAL (ctrl+h) -- */
+    #helpModal{border:1px solid var(--border-hi);border-radius:var(--radius);background:var(--bg2);color:var(--text1);padding:0;width:420px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.85);outline:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0}
+    #helpModal::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
+    .hm-body{padding:10px 16px 14px;max-height:64vh;overflow-y:auto}
+    .hm-row{display:flex;align-items:center;gap:12px;padding:6px 0;font-family:var(--mono);font-size:11px}
+    .hm-keys{width:74px;flex-shrink:0;text-align:right}
+    .hm-desc{flex:1;color:var(--text1)}
 
     /* -- ALERTS PAGE -- */
     #alertsPage{display:none;flex-direction:column;height:100vh;position:relative;z-index:1}
@@ -2396,6 +2404,7 @@ function openSearchModal() {
   const modal = $('searchModal');
   const input = $('smInput');
   if (modal.open) { input.focus(); input.select(); return; }
+  $('helpModal').close(); // never stack the two modals
   input.value = '';
   renderSearchResults('');
   modal.showModal();
@@ -2441,6 +2450,54 @@ function selectSearchResult(i) {
   if (!hit) return;
   $('searchModal').close();
   focusSearchHit(hit);
+}
+
+// -- KEYBOARD SHORTCUTS ---------------------------------------
+// Single source of truth: drives both the key handler and the help modal.
+// Every action triggers the matching toolbar button, so a shortcut can never
+// drift from what the button does.
+// mapOnly: ignored while the Prometheus alerts page is open.
+const SHORTCUTS = [
+  { key: 'f', label: 'Search a node or a zone', mapOnly: true,  run: () => openSearchModal() },
+  { key: 's', label: 'Save layout',             mapOnly: true,  run: () => $('saveLayoutBtn').click() },
+  { key: 'm', label: 'Toggle selection mode',   mapOnly: true,  run: () => $('selectModeBtn').click() },
+  { key: 'a', label: 'Fit the view',            mapOnly: true,  run: () => $('fitBtn').click() },
+  { key: 'r', label: 'Refresh now',             mapOnly: false, run: () => $('refreshBtn').click() },
+  { key: 'h', label: 'Show this help',          mapOnly: false, run: () => openHelpModal() },
+];
+
+// Documented in the help modal, handled by their own listeners
+const HELP_EXTRA = [
+  { keys: ['/'],   label: 'Focus the top bar search field' },
+  { keys: ['esc'], label: 'Close a modal, or clear the node focus' },
+];
+
+function openHelpModal() {
+  const modal = $('helpModal');
+  if (modal.open) return;
+  $('searchModal').close(); // never stack the two modals
+  const rows = [
+    ...SHORTCUTS.map(s => ({ keys: ['ctrl', s.key], label: s.label })),
+    ...HELP_EXTRA,
+  ];
+  $('hmBody').replaceChildren(...rows.map(r => {
+    const row = document.createElement('div');
+    row.className = 'hm-row';
+    const keys = document.createElement('span');
+    keys.className = 'hm-keys';
+    r.keys.forEach((k, i) => {
+      if (i > 0) keys.append(' + ');
+      const kbd = document.createElement('kbd');
+      kbd.textContent = k;
+      keys.appendChild(kbd);
+    });
+    const desc = document.createElement('span');
+    desc.className = 'hm-desc';
+    desc.textContent = r.label;
+    row.append(keys, desc);
+    return row;
+  }));
+  modal.showModal();
 }
 
 const ZONE_FILLS   = ['rgba(74,138,223,.10)','rgba(155,109,255,.10)','rgba(45,186,110,.10)','rgba(224,151,42,.10)','rgba(0,207,255,.10)'];
@@ -3841,14 +3898,18 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.addEventListener('keydown', e => {
-    // Ctrl+F (Cmd+F on mac): search modal, replaces the browser find bar
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
-      if ($('alertsPage').style.display === 'flex') return;
+    // Ctrl+<key> (Cmd on mac): the SHORTCUTS table takes over the browser default
+    if (e.ctrlKey || e.metaKey) {
+      const sc = SHORTCUTS.find(s => s.key === e.key.toLowerCase());
+      if (!sc) return;
+      // Ctrl+A means "select all" inside a text field; leave it to the browser
+      if (sc.key === 'a' && document.activeElement.tagName === 'INPUT') return;
+      if (sc.mapOnly && $('alertsPage').style.display === 'flex') return;
       e.preventDefault();
-      openSearchModal();
+      sc.run();
       return;
     }
-    if ($('searchModal').open) return; // the modal handles its own keys
+    if ($('searchModal').open || $('helpModal').open) return; // modals handle their own keys
     if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
       e.preventDefault(); $('searchInput').focus(); $('searchInput').select();
     }
@@ -3885,6 +3946,14 @@ window.addEventListener('DOMContentLoaded', async () => {
     <span><kbd>enter</kbd> zoom</span>
     <span><kbd>esc</kbd> close</span>
   </div>
+</dialog>
+
+<dialog id="helpModal">
+  <div class="ntm-hdr">
+    <span class="ntm-title">Keyboard shortcuts</span>
+    <button class="ntm-close" onclick="document.getElementById('helpModal').close()">✕</button>
+  </div>
+  <div id="hmBody" class="hm-body"></div>
 </dialog>
 </body>
 </html>

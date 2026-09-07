@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.17.0**
+Version: **0.18.0**
 
 ---
 
@@ -974,6 +974,7 @@ ifaceRatio = max(rx, tx) / speed
 | Refresh interval | 10s / 30s / 1m / 5m / off |
 | Search | Focus and blink a node or a zone by label or ID (press `/` to focus the input) |
 | Search modal | `Ctrl+F` / `Cmd+F` opens a command-palette search over visible nodes and zones |
+| Help modal | `Ctrl+H` / `Cmd+H` opens the keyboard shortcuts list |
 
 **Node click:** single-click focuses the node (hides unrelated edges). Double-click opens the detail modal. If `camera_url` is configured, clicking a Frigate camera node opens `camera_url/#camera_name` in a new window.
 
@@ -981,6 +982,41 @@ ifaceRatio = max(rx, tx) / speed
 - Blackbox edge: opens Prometheus graph for `probe_success{instance="..."}`.
 - WireGuard tunnel: opens Prometheus graph for RX/TX of the WireGuard interface.
 - Normal server link: opens Prometheus graph for RX/TX of the server instance.
+
+#### Keyboard shortcuts
+
+Six global shortcuts use `Ctrl` on Linux/Windows and `Cmd` on macOS. All of them override the browser default.
+
+| Shortcut | Action | Alerts page |
+|---|---|---|
+| `Ctrl+F` | Open the search modal | ignored |
+| `Ctrl+S` | Save layout | ignored |
+| `Ctrl+M` | Toggle selection mode | ignored |
+| `Ctrl+A` | Fit the view | ignored |
+| `Ctrl+R` | Refresh now | active |
+| `Ctrl+H` | Open the keyboard shortcuts help modal | active |
+
+Each shortcut clicks the matching toolbar button (`saveLayoutBtn`, `selectModeBtn`, `fitBtn`, `refreshBtn`), so a shortcut cannot drift from what its button does.
+
+All bindings live in a single `SHORTCUTS` table in `src/static/index.html`. That table drives both the key handler and the help modal, so the on-screen list always matches the real bindings.
+
+**Exceptions:**
+
+- `Ctrl+A` is not intercepted while a text input is focused. There it keeps its native "select all" meaning.
+- `Ctrl+F`, `Ctrl+S`, `Ctrl+M` and `Ctrl+A` are flagged `mapOnly` and are ignored while the Prometheus alerts page is open. `Ctrl+R` and `Ctrl+H` work everywhere.
+
+**Help modal:**
+
+`Ctrl+H` opens `<dialog id="helpModal">`, titled "Keyboard shortcuts". It lists every entry of the `SHORTCUTS` table, plus two rows for keys handled by their own listeners:
+
+| Key | Action |
+|---|---|
+| `/` | Focus the top-bar search field |
+| `esc` | Close a modal, or clear the node focus |
+
+Escape closes the help modal, and doing so does not also clear the node focus.
+
+The search modal and the help modal never stack: opening one closes the other.
 
 #### Search modal
 
