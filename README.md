@@ -4,7 +4,7 @@
 
 Network topology visualizer that overlays real-time Prometheus metrics on an interactive Vis.js graph.
 
-Version: **0.18.1**
+Version: **0.19.0**
 
 ## Screenshots
 
@@ -111,6 +111,9 @@ auth:
   token: mytoken                          # bearer only
 
 instance_label: instance                  # label used as node identifier (default: instance)
+parent_label: parent                      # label holding the parent node name (default: parent)
+guest_label: role                         # label marking a node as a guest (default: job)
+guest_values: [vm, lxc]                   # values of guest_label treated as guests (default: [vm])
 direct_credentials: false                 # cert mode only: send client cert in direct requests
 ssl_verify: true
 timeout: 30                               # HTTP timeout in seconds

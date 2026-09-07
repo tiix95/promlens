@@ -452,6 +452,9 @@ let promUrl           = '';
 let authType          = 'none';
 let appAuthMode       = 'none';
 let instanceLabel     = 'instance';
+let parentLabel       = 'parent';
+let guestLabel        = 'job';   // label whose value marks a node as a guest
+let guestValues       = ['vm'];  // values of guestLabel that attach to `parent`
 let directCredentials = false;
 let bbDestLabel    = 'instance';
 let bbSrcLabel     = null;
@@ -1442,8 +1445,11 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
         zId = zoneParentMap[zId];
       }
     }
-    if (inst.labels.job === 'vm' && inst.labels.parent) {
-      gwId = hostToNodeId[inst.labels.parent] || inst.labels.parent;
+    // A guest attaches to its parent. Some setups label every host with
+    // parent=<itself> (alert inhibition), so never let a node parent itself.
+    const parentRaw = inst.labels[parentLabel];
+    if (parentRaw && parentRaw !== instance && guestValues.includes(inst.labels[guestLabel])) {
+      gwId = hostToNodeId[parentRaw] || parentRaw;
     }
     if (inst.labels.network) {
       const byLabel = networks.find(n => n.label===inst.labels.network || n.cidr===inst.labels.network);
@@ -1486,6 +1492,10 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
 
     nodes.push({
       id: srvId,
+      // Guests discovered from Prometheus honour the VIEWS visibility toggles
+      // the same way as the guests declared in topology.yaml.
+      _kind:  GUEST_KIND[inst.labels[guestLabel]] || null,
+      _state: unknown ? 'unmonitored' : isUp ? 'up' : 'down',
       label: short,
       shape: 'image',
       image: ICON.server(color),
@@ -3596,6 +3606,9 @@ async function fetchAll() {
   try {
     const cfgR = await fetch('/api/config');
     if (cfgR.ok) { const d = await cfgR.json(); promUrl = /^https?:\/\//i.test(d.url || '') ? (d.url || '') : ''; authType = d.auth_type || 'none'; instanceLabel = d.instance_label || 'instance';
+      parentLabel = d.parent_label || 'parent';
+      guestLabel  = d.guest_label  || 'job';
+      guestValues = Array.isArray(d.guest_values) && d.guest_values.length ? d.guest_values : ['vm'];
       directCredentials = !!d.direct_credentials;
       appAuthMode = d.app_auth_mode || 'none';
       if (appAuthMode !== 'none' && d.app_auth_user) {

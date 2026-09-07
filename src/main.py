@@ -377,6 +377,14 @@ async def get_config(request: Request):
         auth = data.get("auth") or {}
         auth_type = (auth.get("type") or "none").lower()
         instance_label = data.get("instance_label") or "instance"
+        # Guest -> parent attachment. Defaults reproduce the historical
+        # behaviour (job="vm" + parent label) so existing setups do not move.
+        parent_label = data.get("parent_label") or "parent"
+        guest_label = data.get("guest_label") or "job"
+        guest_values = data.get("guest_values") or ["vm"]
+        if not isinstance(guest_values, list):
+            guest_values = [guest_values]
+        guest_values = [str(v) for v in guest_values if v]
         def _section(key):
             """Key absent -> None (disabled). Key present even if empty -> dict (enabled)."""
             if key not in data:
@@ -395,7 +403,9 @@ async def get_config(request: Request):
         thresholds = parse_thresholds(data)
         return {
             "url": url, "configured": bool(url), "auth_type": auth_type,
-            "instance_label": instance_label, "blackbox": blackbox,
+            "instance_label": instance_label, "parent_label": parent_label,
+            "guest_label": guest_label, "guest_values": guest_values,
+            "blackbox": blackbox,
             "libvirt": libvirt, "frigate": frigate,
             "app_auth_mode": app_auth_mode, "app_auth_user": app_auth_user,
             "refresh": refresh, "direct_credentials": direct_credentials,

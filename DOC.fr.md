@@ -79,6 +79,9 @@ auth:
   token: mytoken      # bearer uniquement
 
 instance_label: instance   # label Prometheus servant d'ID de noeud (par defaut: instance)
+parent_label: parent       # label portant le nom du noeud parent (par defaut: parent)
+guest_label: role          # label marquant un noeud comme invite (par defaut: job)
+guest_values: [vm, lxc]    # valeurs de guest_label traitees comme invite (par defaut: [vm])
 ssl_verify: true           # mettre false pour ignorer la verification TLS (deconseille)
 timeout: 30                # timeout HTTP en secondes
 proxy: http://proxy:8080   # proxy HTTP optionnel
@@ -90,6 +93,9 @@ proxy: http://proxy:8080   # proxy HTTP optionnel
 |---|---|---|---|
 | `url` | string | requis | URL de base de Prometheus |
 | `instance_label` | string | `instance` | Label utilisé pour identifier chaque noeud |
+| `parent_label` | string | `parent` | Label portant le nom du noeud parent |
+| `guest_label` | string | `job` | Label dont la valeur marque un noeud comme invité |
+| `guest_values` | list | `[vm]` | Valeurs de `guest_label` qui rattachent le noeud à `parent_label` |
 | `ssl_verify` | bool | `true` | Vérification du certificat TLS |
 | `timeout` | int | `30` | Timeout des requêtes HTTP en secondes |
 | `proxy` | string | aucun | URL du proxy HTTP |
@@ -628,6 +634,9 @@ curl -s http://127.0.0.1:8001/api/config | jq .
   "configured": true,
   "auth_type": "none",
   "instance_label": "instance",
+  "parent_label": "parent",
+  "guest_label": "job",
+  "guest_values": ["vm"],
   "direct_credentials": false,
   "refresh": 30,
   "blackbox": {"destination_label": "instance"},
@@ -867,7 +876,10 @@ Priorité (de la plus haute à la plus basse) :
 
 1. `promParentOverride` (interne — surcharges par membre explicite de zone)
 2. Label `network` correspondant à un réseau déclaré par label ou par CIDR
-3. `job=vm` avec un label `parent`
+3. `guest_label` valant une des `guest_values`, avec un label `parent_label`
+   (par défaut : `job=vm` avec `parent`). Un noeud dont le parent est égal à sa
+   propre instance est ignoré : une configuration qui étiquette chaque hôte avec
+   `parent=<lui-meme>` pour l'inhibition d'alertes ne produit jamais de boucle.
 4. Label `zone` correspondant à une zone déclarée
 5. Correspondance CIDR dans `networks`
 6. Repli : premier `router`, puis premier `switch` de la topologie
@@ -1064,13 +1076,15 @@ La barre de recherche du bandeau (et son raccourci `/`) correspond désormais au
 
 Neuf bascules du menu VIEWS masquent les noeuds invités par type et par état. Toutes sont visibles (cochées) par défaut. Désactiver une bascule masque les noeuds correspondants et tous les liens qui les touchent.
 
-| Type | `type` de topologie | Bascules |
+| Type | `type` de topologie / valeur de `guest_label` | Bascules |
 |---|---|---|
 | vm | `vm` | VM UNMONITORED / VM DOWN / VM UP |
 | lxc | `lxc` | LXC UNMONITORED / LXC DOWN / LXC UP |
 | pod | `kube` | POD UNMONITORED / POD DOWN / POD UP |
 
 Les noeuds de tout autre type (`cloud`, `router`, `firewall`, `switch`, `zigbee`, `wifi`) n'ont pas de type invité et ne sont jamais affectés par ces bascules.
+
+Le type invité est déduit du `type` de topologie pour les noeuds déclarés dans `topology.yaml`, et de la valeur de `guest_label` pour les hôtes découverts dans Prometheus. Avec `guest_label: role`, une cible étiquetée `role: vm` obtient donc le type `vm` et suit les bascules VM, tandis que `role: host` n'a pas de type invité.
 
 L'état est résolu dans `buildGraph` :
 
