@@ -861,6 +861,8 @@ For each `up{exporter="node"}` instance:
 **Phase 5b — Probe-only nodes**
 Creates lightweight nodes for targets that appear in blackbox/TCP/HTTP probes but have no `node_exporter` instance.
 
+A second pass then links each of these nodes to the node named by its `parent_label`, once every probe-only node is registered so that a probe target can itself be the parent of another. Without a resolvable parent the node stays disconnected and appears in the orphan panel — which is what used to happen to every TCP-only target, since Phase 7 only draws edges for ICMP and SSH probes.
+
 **Phase 6 — WireGuard tunnels**
 Creates dashed edges. Creates ghost nodes for endpoints unknown to Prometheus.
 

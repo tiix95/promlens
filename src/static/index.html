@@ -714,6 +714,14 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     return `<span style="color:#7e8aaa">VMs (${vms.length}):</span><br>${rows.join('<br>')}`;
   }
 
+  // Declared parent of a probe target, used by Phase 5b to attach a
+  // probe-only node instead of leaving it floating.
+  const probeParent = {};
+  const rememberProbeParent = (raw, inst) => {
+    const p = inst.labels[parentLabel];
+    if (raw && p && p !== raw && !probeParent[raw]) probeParent[raw] = p;
+  };
+
   // -- TCP connect index : host -> [{ service, port, tool, probeSuccess }]
   const tcpByHost = {};
   const tcpRawKeys = new Set();
@@ -722,7 +730,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const raw  = inst.labels[instLabel] || '';
       const last = raw.lastIndexOf(':');
       const host = last > 0 ? raw.slice(0, last) : raw;
-      if (raw) tcpRawKeys.add(raw);
+      if (raw) { tcpRawKeys.add(raw); rememberProbeParent(raw, inst); }
       const probe = {
         service:      inst.labels.service  || inst.labels.upstream || raw,
         port:         inst.labels.port     || '',
@@ -765,7 +773,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const raw  = inst.labels[httpNodeLabel] || inst.labels[parentLabel] || '';
       const last = raw.lastIndexOf(':');
       const host = last > 0 ? raw.slice(0, last) : raw;
-      if (raw) httpRawKeys.add(raw);
+      if (raw) { httpRawKeys.add(raw); rememberProbeParent(raw, inst); }
       const probe = {
         target:       inst.labels[instLabel] || inst.labels.instance || raw,
         probeSuccess: parseFloat(inst.value) === 1,
@@ -801,7 +809,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     const raw  = inst.labels[bbDestLabel] || '';
     const last = raw.lastIndexOf(':');
     const host = last > 0 ? raw.slice(0, last) : raw;
-    if (raw) bbDestRawKeys.add(raw);
+    if (raw) { bbDestRawKeys.add(raw); rememberProbeParent(raw, inst); }
     const srcRaw  = bbSrcLabel ? (inst.labels[bbSrcLabel] || '') : '';
     const srcHost = srcRaw ? (srcRaw.lastIndexOf(':') > 0 ? srcRaw.slice(0, srcRaw.lastIndexOf(':')) : srcRaw) : '';
     const probe = {
@@ -1772,6 +1780,24 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     // Register in hostToNodeId so Phase 7 (collectBlackbox) can create edges to this node
     hostToNodeId[raw] = probeNodeId;
     if (host !== raw) hostToNodeId[host] = probeNodeId;
+  });
+
+  // Second pass: a probe-only node can declare another probe-only node as its
+  // parent, so the edges are resolved once every node above is registered.
+  // Untagged edges, so these nodes leave the orphan panel.
+  probeOnlyCreated.forEach(raw => {
+    const last        = raw.lastIndexOf(':');
+    const host        = last > 0 ? raw.slice(0, last) : raw;
+    const parentName  = probeParent[raw] || probeParent[host];
+    const parentId    = parentName ? hostToNodeId[parentName] : null;
+    const probeNodeId = hostToNodeId[raw];
+    if (!parentId || !probeNodeId || parentId === probeNodeId) return;
+    edges.push({
+      from: parentId, to: probeNodeId,
+      width: 1, dashes: [4, 3],
+      color: { color: '#3d4560', highlight: '#3d4560', hover: '#3d4560' },
+      smooth: { type: 'curvedCW', roundness: 0.1 },
+    });
   });
 
   // -- Phase 5c: libvirt VM nodes (VMs without node_exporter not yet in the graph) --

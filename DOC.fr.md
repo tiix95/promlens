@@ -861,6 +861,8 @@ Pour chaque instance de `up{exporter="node"}` :
 **Phase 5b — Noeuds sondes uniquement**
 Crée des noeuds légers pour les cibles qui apparaissent dans les sondes blackbox/TCP/HTTP mais n'ont pas d'instance `node_exporter`.
 
+Une seconde passe rattache ensuite chacun de ces noeuds à celui désigné par son `parent_label`, une fois tous les noeuds sondes enregistrés afin qu'une cible de sonde puisse elle-même être le parent d'une autre. Sans parent résolvable, le noeud reste déconnecté et apparaît dans le panneau des orphelins -- ce qui était le cas de toutes les cibles TCP uniquement, la phase 7 ne dessinant des liens que pour les sondes ICMP et SSH.
+
 **Phase 6 — Tunnels WireGuard**
 Crée des liens en pointillés. Crée des noeuds fantômes pour les extrémités inconnues de Prometheus.
 
