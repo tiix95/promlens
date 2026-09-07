@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.20.2**
+Version : **0.20.3**
 
 ---
 
@@ -222,14 +222,14 @@ blackbox:
 
 Chaque sonde conserve sa cible reelle, lue comme valeur de `instance_label`, puis `instance`, puis la valeur de `destination_label`. Les sondes sont dedupliquees sur cette cible, donc aucune sonde n'est perdue et aucune sonde en echec n'est masquee.
 
-Avec une seule sonde sur le noeud, le tooltip est inchange et nomme le noeud lui-meme :
+Dans le tooltip du noeud, chaque ligne de sonde nomme sa propre cible, quel que soit le nombre de sondes sur le noeud. Une sonde unique nomme l'hote sonde, pas le noeud :
 
 ```
 Probe:
-  v ICMP prometheus -> synacktiv
+  v ICMP prometheus -> dojo2-orange-alarme
 ```
 
-Avec plusieurs sondes, chaque ligne nomme sa propre cible :
+Avec plusieurs sondes, une ligne par cible :
 
 ```
 Probe:
@@ -238,10 +238,12 @@ Probe:
   x ICMP prometheus -> 10.0.7.9
 ```
 
+Sur une configuration par defaut (`destination_label: instance`), la cible et le nom du noeud sont la meme chaine, donc le tooltip se lit exactement comme avant. Le libelle ne change que quand `destination_label` pointe sur un label de groupe. Une serie dont la cible ne peut pas etre resolue retombe sur le nom du noeud.
+
 Consequences :
 
 - **Etat du noeud** : le noeud passe en orange des qu'une seule de ses sondes est down.
-- **Panneau issues** : les sondes en echec sont listees `icmp <cible>` quand le noeud porte plusieurs cibles, `icmp` seul sinon. Les entrees sont dedupliquees.
+- **Panneau issues** : il suit sa propre regle, car son entree commence deja par le label du noeud. Les sondes en echec sont listees `icmp <cible>` quand le noeud porte plusieurs cibles, `icmp` seul sinon. Les entrees sont dedupliquees.
 - **Lien du graphe** : le lien entre les deux noeuds garde une entree par sonde. Son tooltip affiche une ligne `targets:` et tague chaque ligne de sonde avec sa cible.
 - **Clic sur le lien** : ouvre `probe_success{instance="<cible>"}` sur la cible reelle de la sonde, pas sur la valeur du groupe.
 

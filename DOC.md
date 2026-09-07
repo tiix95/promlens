@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.20.2**
+Version: **0.20.3**
 
 ---
 
@@ -222,14 +222,14 @@ blackbox:
 
 Each probe keeps its real target, read as `instance_label` value, then `instance`, then the `destination_label` value. Probes are deduplicated on that target, so no probe is discarded and no failing probe is hidden.
 
-With a single probe on the node, the tooltip is unchanged and names the node itself:
+In the node tooltip, each probe row names its own target, whatever the number of probes on the node. A single probe on the node names the probed host, not the node:
 
 ```
 Probe:
-  v ICMP prometheus -> synacktiv
+  v ICMP prometheus -> dojo2-orange-alarme
 ```
 
-With several probes, each row names its own target:
+With several probes, one row per target:
 
 ```
 Probe:
@@ -238,10 +238,12 @@ Probe:
   x ICMP prometheus -> 10.0.7.9
 ```
 
+On a default setup (`destination_label: instance`) the target and the node name are the same string, so the tooltip reads exactly as before. The wording only differs when `destination_label` points at a group label. A series whose target cannot be resolved falls back to the node name.
+
 Consequences:
 
 - **Node status**: the node turns orange as soon as any one of its probes is down.
-- **Issues panel**: failing probes are listed as `icmp <target>` when the node carries several targets, `icmp` alone otherwise. Entries are deduplicated.
+- **Issues panel**: it follows its own rule, since its entry already leads with the node label. Failing probes are listed as `icmp <target>` when the node carries several targets, `icmp` alone otherwise. Entries are deduplicated.
 - **Graph edge**: the edge between the two nodes keeps one entry per probe. Its tooltip prints a `targets:` line and tags each probe row with its target.
 - **Edge click**: opens `probe_success{instance="<target>"}` for the real probe target, not the group value.
 

@@ -4,7 +4,7 @@
 
 Network topology visualizer that overlays real-time Prometheus metrics on an interactive Vis.js graph.
 
-Version: **0.20.2**
+Version: **0.20.3**
 
 ## Screenshots
 

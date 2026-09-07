@@ -2,7 +2,7 @@
 # promlens -- Podman container build & export
 # -----------------------------------------------------------------------------
 
-VERSION    := 0.20.2
+VERSION    := 0.20.3
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 
 IMAGE_NAME := promlens

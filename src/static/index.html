@@ -916,9 +916,9 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     return findBbProbes(instance, host).some(p => !p.probeSuccess);
   }
 
-  // Several probes can share one node when destination_label is a group label.
-  // In that case name each probe by its own target; with a single probe the node
-  // name stays the clearer wording.
+  // Each probe row names its own target, which differs from the node name when
+  // destination_label points at a group label. Both are the same string on a
+  // default setup, so the wording only changes where it carries information.
   const bbMultiTarget = probes => new Set(probes.map(p => p.target).filter(Boolean)).size > 1;
   const bbShortHost   = h => esc((h || '').replace(/:\d+$/, ''));
 
@@ -935,13 +935,12 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       // When source_label is configured, each probe appears in the SOURCE node's tooltip only.
       const outgoing = findBbOutgoingProbes(instance, host);
       if (!outgoing.length) return null;
-      const self  = bbShortHost(host || instance);
-      const multi = bbMultiTarget(outgoing);
+      const self = bbShortHost(host || instance);
       const rows = outgoing.map(p => {
         const c     = p.probeSuccess ? '#2dba6e' : '#f04f4f';
         const icon  = p.probeSuccess ? '✓' : '✗';
         const label = bbIsSsh(p.module) ? 'SSH' : 'ICMP';
-        const dest = bbShortHost(multi && p.target ? p.target : p.destHost);
+        const dest = bbShortHost(p.target || p.destHost);
         return `&nbsp;&nbsp;<span style="color:${c}">${icon} ${label} ${self} → ${dest}</span>`;
       });
       return `<span style="color:#7e8aaa">Probe:</span><br>${rows.join('<br>')}`;
@@ -949,14 +948,13 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     // Without source_label: show incoming probes in the destination node's tooltip.
     const probes = findBbProbes(instance, host);
     if (!probes.length) return null;
-    const dest  = bbShortHost(host || instance);
-    const multi = bbMultiTarget(probes);
+    const dest = bbShortHost(host || instance);
     const rows = probes.map(p => {
       const c     = p.probeSuccess ? '#2dba6e' : '#f04f4f';
       const icon  = p.probeSuccess ? '✓' : '✗';
       const label = bbIsSsh(p.module) ? 'SSH' : 'ICMP';
       const src   = bbShortHost(p.src || 'prometheus');
-      const dst   = multi && p.target ? bbShortHost(p.target) : dest;
+      const dst   = p.target ? bbShortHost(p.target) : dest;
       return `&nbsp;&nbsp;<span style="color:${c}">${icon} ${label} ${src} → ${dst}</span>`;
     });
     return `<span style="color:#7e8aaa">Probe:</span><br>${rows.join('<br>')}`;
