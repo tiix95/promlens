@@ -172,7 +172,7 @@ blackbox:
 | `enabled` | bool | `true` | Active/désactive sans supprimer la section |
 | `destination_label` | string | `instance` | Label qui contient l'identifiant de la cible de sonde |
 | `source_label` | string | aucun | Label qui contient l'identifiant de la source de sonde |
-| `http_node_label` | string | `upstream` | Label identifiant le noeud pour les sondes HTTP/HTTPS |
+| `http_node_label` | string | `upstream` | Label identifiant le noeud pour les sondes HTTP/HTTPS, avec repli sur `parent_label` s'il est absent |
 | `dest_aliases` | map | `{}` | Associe des ID de noeuds de topologie à des listes d'alias de cibles de sonde |
 
 ### Section frigate

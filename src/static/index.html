@@ -759,7 +759,10 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
   const httpRawKeys = new Set();
   if (httpData?.instances) {
     httpData.instances.forEach(inst => {
-      const raw  = inst.labels[httpNodeLabel] || '';
+      // A reverse-proxied url has an upstream; one served by the host itself
+      // only carries the parent label. Without this fallback the probe was
+      // silently dropped.
+      const raw  = inst.labels[httpNodeLabel] || inst.labels[parentLabel] || '';
       const last = raw.lastIndexOf(':');
       const host = last > 0 ? raw.slice(0, last) : raw;
       if (raw) httpRawKeys.add(raw);

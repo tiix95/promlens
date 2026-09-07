@@ -172,7 +172,7 @@ blackbox:
 | `enabled` | bool | `true` | Enable/disable without removing the section |
 | `destination_label` | string | `instance` | Label that holds the probe target identifier |
 | `source_label` | string | none | Label that holds the probe source identifier |
-| `http_node_label` | string | `upstream` | Label identifying the node for HTTP/HTTPS probes |
+| `http_node_label` | string | `upstream` | Label identifying the node for HTTP/HTTPS probes, falling back to `parent_label` when absent |
 | `dest_aliases` | map | `{}` | Maps topology node IDs to lists of probe target aliases |
 
 ### frigate section
