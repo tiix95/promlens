@@ -4,7 +4,7 @@
 
 Visualiseur de topologie reseau qui superpose les metriques Prometheus temps reel sur un graphe Vis.js interactif.
 
-Version : **0.20.0**
+Version : **0.20.1**
 
 ## Captures d'ecran
 
@@ -215,7 +215,7 @@ Reference complete et exemples : voir [DOC.fr.md](DOC.fr.md)
 - Liens reseau -- RX/TX par interface, colores selon le taux d'utilisation
 - Tunnels WireGuard -- liens pointilles avec leurs metriques d'interface dediees
 - Bulles de zone -- regroupement visuel par label Prometheus `zone`
-- Sondes blackbox -- liens de sonde ICMP, SSH, TCP connect, HTTP/HTTPS et etat par noeud ; noms des modules configurables via `blackbox.modules`
+- Sondes blackbox -- liens de sonde ICMP, SSH, TCP connect, HTTP/HTTPS et etat par noeud ; noms des modules configurables via `blackbox.modules` ; plusieurs sondes peuvent etre groupees sur un noeud via `destination_label`, chacune listee avec sa cible
 - Cameras Frigate -- un noeud par camera, vert=en ligne, rouge=hors ligne
 - VMs libvirt -- liste des VMs avec leur etat dans les tooltips de l'hyperviseur
 - Visibilite des invites -- masquer les noeuds VM / LXC / POD par etat (unmonitored, down, up) depuis le menu VIEWS

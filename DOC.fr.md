@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.20.0**
+Version : **0.20.1**
 
 ---
 
@@ -175,7 +175,7 @@ blackbox:
 | Champ | Type | Défaut | Description |
 |---|---|---|---|
 | `enabled` | bool | `true` | Active/désactive sans supprimer la section |
-| `destination_label` | string | `instance` | Label qui contient l'identifiant de la cible de sonde |
+| `destination_label` | string | `instance` | Label qui contient l'identifiant de la cible de sonde ; peut pointer sur un label de groupe partage par plusieurs sondes (voir ci-dessous) |
 | `source_label` | string | aucun | Label qui contient l'identifiant de la source de sonde |
 | `http_node_label` | string | `upstream` | Label identifiant le noeud pour les sondes HTTP/HTTPS, avec repli sur `parent_label` s'il est absent |
 | `modules` | map | voir ci-dessous | Noms des modules blackbox interrogés pour chaque rôle |
@@ -209,6 +209,43 @@ blackbox:
 ```
 
 La map résolue (config fusionnée avec les défauts) est renvoyée par `GET /api/config` dans `blackbox.modules`.
+
+#### Grouper plusieurs sondes sur un noeud
+
+`destination_label` pointe normalement sur un label unique par sonde (le defaut `instance`). Il peut aussi pointer sur un label de groupe, pour rattacher plusieurs sondes au meme noeud de topologie :
+
+```yaml
+blackbox:
+  enabled: true
+  destination_label: parent      # plusieurs sondes partagent parent="synacktiv"
+```
+
+Chaque sonde conserve sa cible reelle, lue comme valeur de `instance_label`, puis `instance`, puis la valeur de `destination_label`. Les sondes sont dedupliquees sur cette cible, donc aucune sonde n'est perdue et aucune sonde en echec n'est masquee.
+
+Avec une seule sonde sur le noeud, le tooltip est inchange et nomme le noeud lui-meme :
+
+```
+Probe:
+  v ICMP prometheus -> synacktiv
+```
+
+Avec plusieurs sondes, chaque ligne nomme sa propre cible :
+
+```
+Probe:
+  v ICMP prometheus -> dojo2-orange-alarme
+  v ICMP prometheus -> dojo2-orange-cam
+  x ICMP prometheus -> 10.0.7.9
+```
+
+Consequences :
+
+- **Etat du noeud** : le noeud passe en orange des qu'une seule de ses sondes est down.
+- **Panneau issues** : les sondes en echec sont listees `icmp <cible>` quand le noeud porte plusieurs cibles, `icmp` seul sinon. Les entrees sont dedupliquees.
+- **Lien du graphe** : le lien entre les deux noeuds garde une entree par sonde. Son tooltip affiche une ligne `targets:` et tague chaque ligne de sonde avec sa cible.
+- **Clic sur le lien** : ouvre `probe_success{instance="<cible>"}` sur la cible reelle de la sonde, pas sur la valeur du groupe.
+
+Les configurations utilisant le defaut `destination_label: instance` ne sont pas affectees : la valeur de destination et la cible de la sonde sont la meme chaine.
 
 ### Section frigate
 
@@ -912,7 +949,7 @@ Une seconde passe rattache ensuite chacun de ces noeuds à celui désigné par s
 Crée des liens en pointillés. Crée des noeuds fantômes pour les extrémités inconnues de Prometheus.
 
 **Phase 7 — Liens de sondes blackbox**
-Regroupe les sondes par paire de noeuds non ordonnée. Crée des liens colorés (vert=toutes UP, rouge=au moins une DOWN). Les sondes bidirectionnelles obtiennent des flèches aux deux extrémités.
+Regroupe les sondes par paire de noeuds non ordonnée. Les sondes sont dédupliquées par cible réelle, donc un `destination_label` de groupe garde une entrée par sonde. Crée des liens colorés (vert=toutes UP, rouge=au moins une DOWN). Les sondes bidirectionnelles obtiennent des flèches aux deux extrémités.
 
 **Phase 8 — Caméras Frigate**
 Crée un noeud par caméra à partir de `frigate_camera_fps`. Résout le parent via la section cameras, puis le label `parent`, puis le repli sur la topologie.
@@ -1038,7 +1075,7 @@ ifaceRatio = max(rx, tx) / speed
 **Clic sur un noeud :** un simple clic met le noeud en avant (masque les liens non liés). Un double-clic ouvre la fenêtre de détail. Si `camera_url` est configuré, cliquer sur un noeud caméra Frigate ouvre `camera_url/#camera_name` dans une nouvelle fenêtre.
 
 **Clic sur un lien :**
-- Lien blackbox : ouvre le graphe Prometheus de `probe_success{instance="..."}`.
+- Lien blackbox : ouvre le graphe Prometheus de `probe_success{instance="..."}`, sur la cible réelle de la sonde (pas la valeur de `destination_label` quand c'est un label de groupe).
 - Tunnel WireGuard : ouvre le graphe Prometheus des RX/TX de l'interface WireGuard.
 - Lien serveur normal : ouvre le graphe Prometheus des RX/TX de l'instance serveur.
 

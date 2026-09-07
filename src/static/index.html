@@ -822,10 +822,12 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     return `<span style="color:#7e8aaa">HTTP:</span><br>${rows.join('<br>')}`;
   }
 
-  // -- ICMP/SSH probe index : host -> [{ module, probeSuccess, src }]
+  // -- ICMP/SSH probe index : host -> [{ module, probeSuccess, src, target }]
+  // target = what the probe actually pings. It differs from the index key when
+  // destination_label points at a group label shared by several probes.
   const bbIsSsh = bbModuleMatcher('ssh');
   const bbDestByHost = {};
-  const bbSrcByHost  = {}; // src -> [{ module, probeSuccess, destHost }] -- only when source_label configured
+  const bbSrcByHost  = {}; // src -> [{ module, probeSuccess, destHost, target }] -- only when source_label configured
   const bbDestRawKeys = new Set();
   [...(blackboxData?.instances || []), ...(blackboxSshData?.instances || [])].forEach(inst => {
     const raw  = inst.labels[bbDestLabel] || '';
@@ -838,18 +840,19 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       module:       inst.labels.module || '',
       probeSuccess: parseFloat(inst.value) === 1,
       src:          srcRaw || 'prometheus',
+      target:       inst.labels[instLabel] || inst.labels.instance || raw,
     };
     [raw, host].filter(Boolean).forEach(k => {
       if (!bbDestByHost[k]) bbDestByHost[k] = [];
-      if (!bbDestByHost[k].some(p => p.module === probe.module && p.src === probe.src))
+      if (!bbDestByHost[k].some(p => p.module === probe.module && p.src === probe.src && p.target === probe.target))
         bbDestByHost[k].push(probe);
     });
     // Index by source so outgoing probes can be shown in the source node's tooltip
     if (srcRaw) {
-      const outProbe = { module: probe.module, probeSuccess: probe.probeSuccess, destHost: host || raw };
+      const outProbe = { module: probe.module, probeSuccess: probe.probeSuccess, destHost: host || raw, target: probe.target };
       [srcRaw, srcHost].filter(Boolean).forEach(k => {
         if (!bbSrcByHost[k]) bbSrcByHost[k] = [];
-        if (!bbSrcByHost[k].some(p => p.module === outProbe.module && p.destHost === outProbe.destHost))
+        if (!bbSrcByHost[k].some(p => p.module === outProbe.module && p.destHost === outProbe.destHost && p.target === outProbe.target))
           bbSrcByHost[k].push(outProbe);
       });
     }
@@ -903,17 +906,32 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     return findBbProbes(instance, host).some(p => !p.probeSuccess);
   }
 
+  // Several probes can share one node when destination_label is a group label.
+  // In that case name each probe by its own target; with a single probe the node
+  // name stays the clearer wording.
+  const bbMultiTarget = probes => new Set(probes.map(p => p.target).filter(Boolean)).size > 1;
+  const bbShortHost   = h => esc((h || '').replace(/:\d+$/, ''));
+
+  // Failing probes for the issues panel: "icmp" alone, or "icmp <target>" when
+  // the node carries probes to several targets.
+  const bbFailingLabels = probes => {
+    const multi = bbMultiTarget(probes);
+    return [...new Set(probes.filter(p => !p.probeSuccess).map(p =>
+      multi && p.target ? `${p.module} ${p.target.replace(/:\d+$/, '')}` : p.module))];
+  };
+
   function bbProbeTip(instance, host) {
     if (bbSrcLabel) {
       // When source_label is configured, each probe appears in the SOURCE node's tooltip only.
       const outgoing = findBbOutgoingProbes(instance, host);
       if (!outgoing.length) return null;
-      const self = esc((host || instance).replace(/:\d+$/, ''));
+      const self  = bbShortHost(host || instance);
+      const multi = bbMultiTarget(outgoing);
       const rows = outgoing.map(p => {
         const c     = p.probeSuccess ? '#2dba6e' : '#f04f4f';
         const icon  = p.probeSuccess ? '✓' : '✗';
         const label = bbIsSsh(p.module) ? 'SSH' : 'ICMP';
-        const dest = esc((p.destHost || '').replace(/:\d+$/, ''));
+        const dest = bbShortHost(multi && p.target ? p.target : p.destHost);
         return `&nbsp;&nbsp;<span style="color:${c}">${icon} ${label} ${self} → ${dest}</span>`;
       });
       return `<span style="color:#7e8aaa">Probe:</span><br>${rows.join('<br>')}`;
@@ -921,13 +939,15 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     // Without source_label: show incoming probes in the destination node's tooltip.
     const probes = findBbProbes(instance, host);
     if (!probes.length) return null;
-    const dest = esc((host || instance).replace(/:\d+$/, ''));
+    const dest  = bbShortHost(host || instance);
+    const multi = bbMultiTarget(probes);
     const rows = probes.map(p => {
       const c     = p.probeSuccess ? '#2dba6e' : '#f04f4f';
       const icon  = p.probeSuccess ? '✓' : '✗';
       const label = bbIsSsh(p.module) ? 'SSH' : 'ICMP';
-      const src   = esc((p.src || 'prometheus').replace(/:\d+$/, ''));
-      return `&nbsp;&nbsp;<span style="color:${c}">${icon} ${label} ${src} → ${dest}</span>`;
+      const src   = bbShortHost(p.src || 'prometheus');
+      const dst   = multi && p.target ? bbShortHost(p.target) : dest;
+      return `&nbsp;&nbsp;<span style="color:${c}">${icon} ${label} ${src} → ${dst}</span>`;
     });
     return `<span style="color:#7e8aaa">Probe:</span><br>${rows.join('<br>')}`;
   }
@@ -1225,7 +1245,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       if (ft.length) r.push(`TCP: ${ft.join(', ')}`);
       const fh = (httpByHost[key] || []).filter(p => !p.probeSuccess).map(p => p.target.replace(/^https?:\/\//, ''));
       if (fh.length) r.push(`HTTP: ${fh.join(', ')}`);
-      const fb = findBbProbes(key, key).filter(p => !p.probeSuccess).map(p => p.module);
+      const fb = bbFailingLabels(findBbProbes(key, key));
       if (fb.length) r.push(`probe: ${fb.join(', ')}`);
       if (r.length) issues.push({ label, severity: 'orange', reason: r.join(', ') });
     }
@@ -1409,7 +1429,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
         if (ft.length) r.push(`TCP: ${ft.join(', ')}`);
         const fh = (httpByHost[instance] || httpByHost[host] || []).filter(p => !p.probeSuccess).map(p => p.target.replace(/^https?:\/\//, ''));
         if (fh.length) r.push(`HTTP: ${fh.join(', ')}`);
-        const fb = findBbProbes(instance, host).filter(p => !p.probeSuccess).map(p => p.module);
+        const fb = bbFailingLabels(findBbProbes(instance, host));
         if (fb.length) r.push(`probe: ${fb.join(', ')}`);
       }
       if (r.length) issues.push({ label: nodeLabel, severity: color === '#f04f4f' ? 'red' : 'orange', reason: r.join(', ') });
@@ -2007,7 +2027,10 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
         if (resolved) { srcId = resolved; srcName = srcHost || srcRaw; }
       }
 
-      const seenKey = `${srcId}:::${targetRaw}`;
+      // Dedup on the real probe target, not on the destination label: a group
+      // label shared by several probes would otherwise keep only the first one.
+      const probeTarget = inst.labels[instLabel] || inst.labels.instance || targetRaw;
+      const seenKey = `${srcId}:::${targetRaw}:::${probeTarget}`;
       if (seen.has(seenKey)) return;
       seen.add(seenKey);
 
@@ -2032,9 +2055,9 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const e = bbByKey[groupKey];
       const probeList  = fromA ? e.probesAB  : e.probesBA;
       const targetList = fromA ? e.targetsAB : e.targetsBA;
-      if (!targetList.includes(targetRaw)) targetList.push(targetRaw);
+      if (!targetList.includes(probeTarget)) targetList.push(probeTarget);
       // module = actual probe name (display), role = configured role (filters)
-      probeList.push({ module: inst.labels.module || role, role, probeUp: parseFloat(inst.value) === 1, target: targetRaw });
+      probeList.push({ module: inst.labels.module || role, role, probeUp: parseFloat(inst.value) === 1, target: probeTarget });
     });
   };
 

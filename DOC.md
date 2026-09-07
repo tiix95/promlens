@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.20.0**
+Version: **0.20.1**
 
 ---
 
@@ -175,7 +175,7 @@ blackbox:
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | bool | `true` | Enable/disable without removing the section |
-| `destination_label` | string | `instance` | Label that holds the probe target identifier |
+| `destination_label` | string | `instance` | Label that holds the probe target identifier; may point at a group label shared by several probes (see below) |
 | `source_label` | string | none | Label that holds the probe source identifier |
 | `http_node_label` | string | `upstream` | Label identifying the node for HTTP/HTTPS probes, falling back to `parent_label` when absent |
 | `modules` | map | see below | Blackbox module names queried for each role |
@@ -209,6 +209,43 @@ blackbox:
 ```
 
 The resolved map (config merged with the defaults) is returned by `GET /api/config` as `blackbox.modules`.
+
+#### Grouping several probes on one node
+
+`destination_label` normally points at a label unique per probe (the default `instance`). It may also point at a group label, so that several probes attach to the same topology node:
+
+```yaml
+blackbox:
+  enabled: true
+  destination_label: parent      # many probes share parent="synacktiv"
+```
+
+Each probe keeps its real target, read as `instance_label` value, then `instance`, then the `destination_label` value. Probes are deduplicated on that target, so no probe is discarded and no failing probe is hidden.
+
+With a single probe on the node, the tooltip is unchanged and names the node itself:
+
+```
+Probe:
+  v ICMP prometheus -> synacktiv
+```
+
+With several probes, each row names its own target:
+
+```
+Probe:
+  v ICMP prometheus -> dojo2-orange-alarme
+  v ICMP prometheus -> dojo2-orange-cam
+  x ICMP prometheus -> 10.0.7.9
+```
+
+Consequences:
+
+- **Node status**: the node turns orange as soon as any one of its probes is down.
+- **Issues panel**: failing probes are listed as `icmp <target>` when the node carries several targets, `icmp` alone otherwise. Entries are deduplicated.
+- **Graph edge**: the edge between the two nodes keeps one entry per probe. Its tooltip prints a `targets:` line and tags each probe row with its target.
+- **Edge click**: opens `probe_success{instance="<target>"}` for the real probe target, not the group value.
+
+Configurations using the default `destination_label: instance` are unaffected: the destination value and the probe target are the same string.
 
 ### frigate section
 
@@ -912,7 +949,7 @@ A second pass then links each of these nodes to the node named by its `parent_la
 Creates dashed edges. Creates ghost nodes for endpoints unknown to Prometheus.
 
 **Phase 7 — Blackbox probe edges**
-Groups probes by unordered node pair. Creates colored edges (green=all UP, red=any DOWN). Bidirectional probes get arrows at both ends.
+Groups probes by unordered node pair. Probes are deduplicated per real target, so a group `destination_label` keeps one entry per probe. Creates colored edges (green=all UP, red=any DOWN). Bidirectional probes get arrows at both ends.
 
 **Phase 8 — Frigate cameras**
 Creates one node per camera from `frigate_camera_fps`. Resolves parent using the cameras section, then the `parent` label, then the topology fallback.
@@ -1038,7 +1075,7 @@ ifaceRatio = max(rx, tx) / speed
 **Node click:** single-click focuses the node (hides unrelated edges). Double-click opens the detail modal. If `camera_url` is configured, clicking a Frigate camera node opens `camera_url/#camera_name` in a new window.
 
 **Edge click:**
-- Blackbox edge: opens Prometheus graph for `probe_success{instance="..."}`.
+- Blackbox edge: opens Prometheus graph for `probe_success{instance="..."}`, using the probe's real target (not the `destination_label` value when it is a group label).
 - WireGuard tunnel: opens Prometheus graph for RX/TX of the WireGuard interface.
 - Normal server link: opens Prometheus graph for RX/TX of the server instance.
 

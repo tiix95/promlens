@@ -4,7 +4,7 @@
 
 Network topology visualizer that overlays real-time Prometheus metrics on an interactive Vis.js graph.
 
-Version: **0.20.0**
+Version: **0.20.1**
 
 ## Screenshots
 
@@ -214,7 +214,7 @@ Full reference and examples: see [DOC.md](DOC.md)
 - Network links — RX/TX per interface, colored by utilization
 - WireGuard tunnels — dashed links with dedicated interface metrics
 - Zone bubbles — visual grouping by Prometheus `zone` label
-- Blackbox probes — ICMP, SSH, TCP connect, HTTP/HTTPS probe links and per-node status; module names configurable via `blackbox.modules`
+- Blackbox probes — ICMP, SSH, TCP connect, HTTP/HTTPS probe links and per-node status; module names configurable via `blackbox.modules`; several probes can be grouped on one node via `destination_label`, each listed with its own target
 - Frigate cameras — one node per camera, green=online, red=offline
 - Libvirt VMs — VM list with state in hypervisor tooltips
 - Guest visibility — hide VM / LXC / POD nodes per state (unmonitored, down, up) from the VIEWS menu
