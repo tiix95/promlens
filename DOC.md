@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.20.3**
+Version: **0.21.0**
 
 ---
 
@@ -65,7 +65,7 @@ Override with environment variables (see section 8).
 
 ## 3. Configuration — promlens.yaml
 
-This file is read on every request. Editing it takes effect immediately without a server restart (use the RELOAD button in the UI or `POST /api/reload` to force a graph refresh).
+This file is read on every request. Editing it takes effect immediately without a server restart (use the RELOAD button in the UI or `POST /api/reload` to force a graph refresh, or set [auto_reload](#auto_reload-option) to rebuild the graph on save).
 
 ### Prometheus connection
 
@@ -100,7 +100,29 @@ proxy: http://proxy:8080   # optional HTTP proxy
 | `timeout` | int | `30` | HTTP request timeout in seconds |
 | `proxy` | string | none | HTTP proxy URL |
 | `refresh` | int | `30` | Default auto-refresh interval shown in the UI (seconds) |
+| `auto_reload` | bool | `false` | Rebuild the graph as soon as `promlens.yaml` or `topology.yaml` changes on disk |
 | `direct_credentials` | bool | `false` | cert mode only: browser sends client cert in direct Prometheus requests |
+
+### auto_reload option
+
+Triggers a graph rebuild as soon as `topology.yaml` or `promlens.yaml` changes on disk. Default is `false`.
+
+```yaml
+auto_reload: true
+```
+
+Both files were already re-read on every refresh cycle: `GET /api/topology` and `GET /api/config` parse their file on each request, so an edit was always picked up eventually. This option only changes **when** the rebuild is triggered, not what is rebuilt. Without it, an edit shows up after up to `refresh` seconds (30 by default) or when you click RELOAD.
+
+With `auto_reload: true`, the UI polls `GET /api/mtime` every 5 seconds. When the modification time of either file changes, it:
+
+1. Calls `POST /api/reload` to validate both YAML files.
+2. Runs a full refresh (`fetchAll()`), but only if the validation succeeded.
+
+If the validation fails — typically an editor writing a half-saved file — the round is skipped and a warning is logged in the browser console. The next save is retried, so a transient parse error never leaves the graph stuck.
+
+With `auto_reload: false` (the default), nothing is polled: the graph still refreshes on its normal interval and the RELOAD button still works.
+
+The 5 second poll interval is a fixed constant (`AUTO_RELOAD_POLL_MS` in `src/static/index.html`); it is not configurable.
 
 ### app_auth section
 
@@ -792,6 +814,30 @@ curl -s -X POST http://127.0.0.1:8001/api/reload
 # {"detail": "topology.yaml: mapping values are not allowed here\n  line 5, column 3"}
 ```
 
+### GET /api/mtime
+
+Returns the modification time of `promlens.yaml` and `topology.yaml` as Unix timestamps. Used by the frontend when [auto_reload](#auto_reload-option) is enabled, to detect a file change without re-parsing anything.
+
+A file that does not exist or cannot be stat'ed is reported as `0.0`. Not rate-limited: the endpoint only performs two `stat()` calls.
+
+```bash
+curl -s http://127.0.0.1:8001/api/mtime | jq .
+```
+
+```json
+{
+  "config": 1788470740.451429,
+  "topology": 1788470741.299453
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `config` | float | Modification time of `promlens.yaml` (`CONFIG_FILE`) |
+| `topology` | float | Modification time of `topology.yaml` (`TOPOLOGY_FILE`) |
+
+Subject to the same authentication as the other `/api/` routes.
+
 ### GET /api/alerts
 
 Proxies `GET /api/v1/alerts` from Prometheus and returns the array of alert objects. Used by the frontend to populate the alerts panel and node overlays. Not available in cert mode (the browser fetches alerts directly from Prometheus in that case).
@@ -932,6 +978,8 @@ Every refresh cycle runs these in parallel with `Promise.all`:
 | 21 | Backend / Prometheus | `GET /api/alerts` (proxied) or `GET /api/v1/alerts` (cert mode, direct) | Firing Prometheus alerts |
 
 Queries 15-20 are skipped (Promise resolves immediately) when their integration is disabled. Queries 15-18 are also skipped when their role has an empty module list in [blackbox.modules](#blackboxmodules). Query 21 always runs; it returns an empty array on error so a Prometheus alertmanager outage does not block the graph.
+
+`GET /api/mtime` is not part of this batch: when [auto_reload](#auto_reload-option) is enabled it runs on its own 5 second timer and only triggers a full `fetchAll()` when a config file has changed.
 
 ### buildGraph phases
 
@@ -1355,3 +1403,5 @@ Cameras `front-door` and `backyard` appear as nodes attached to `sw-cam`. Clicki
 - **Webhook delivery is best effort**: A failed POST is logged and dropped, with no retry and no queue. Alerts firing and resolving within a single `interval` window are never notified.
 
 - **YAML reload is parse-only**: `POST /api/reload` validates syntax with `yaml.safe_load` but does not validate field values or types. An invalid `url` field passes reload validation but causes HTTP 503 on the next query.
+
+- **auto_reload watches mtime only**: the detection compares the modification time returned by `GET /api/mtime`. A file rewritten with an unchanged mtime is not detected, and the polling adds one request every 5 seconds per open browser tab. Since the trigger is a full refresh, the same validation caveat applies: a config that parses but is semantically wrong is reloaded like any other.

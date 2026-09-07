@@ -18,6 +18,9 @@ auth:
   # token: ""
 
 # Advanced options
+# refresh: 30                # default auto-refresh interval in seconds (default: 30)
+# auto_reload: true          # watch promlens.yaml and topology.yaml and rebuild the graph
+#                            # as soon as a file changes, without waiting for the cycle (default: false)
 # instance_label: instance   # Prometheus label used as the node identifier (default: instance)
 # parent_label: parent       # label holding the name of the parent node (default: parent)
 # guest_label: role          # label whose value marks a node as a guest (default: job)

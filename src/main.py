@@ -65,12 +65,16 @@ _SECURITY_HEADERS = {
 _csp_cache: tuple[float, str] = (0.0, "")
 
 
+def _file_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime if path.exists() else 0.0
+    except OSError:
+        return 0.0
+
+
 def _build_csp() -> str:
     global _csp_cache
-    try:
-        mtime = CONFIG_FILE.stat().st_mtime if CONFIG_FILE.exists() else 0.0
-    except OSError:
-        mtime = 0.0
+    mtime = _file_mtime(CONFIG_FILE)
     if mtime and mtime == _csp_cache[0]:
         return _csp_cache[1]
 
@@ -344,6 +348,12 @@ async def reload_config():
     return {"ok": True}
 
 
+@app.get("/api/mtime")
+async def get_mtime():
+    """Modification times of the config files, polled by the UI when auto_reload is on."""
+    return {"config": _file_mtime(CONFIG_FILE), "topology": _file_mtime(TOPOLOGY_FILE)}
+
+
 @app.get("/api/alerts")
 async def get_alerts(request: Request):
     client_ip = _get_client_ip(request)
@@ -442,6 +452,7 @@ async def get_config(request: Request):
         app_auth_mode = load_app_auth_config().mode
         app_auth_user = getattr(request.state, "user", None)
         refresh = int(data.get("refresh", 30))
+        auto_reload = bool(data.get("auto_reload", False))
         direct_credentials = bool(data.get("direct_credentials", False))
         # Same parsing as the notifier: the graph colors and the ProMLens
         # alerts must never disagree on a threshold.
@@ -453,7 +464,8 @@ async def get_config(request: Request):
             "blackbox": blackbox,
             "libvirt": libvirt, "frigate": frigate,
             "app_auth_mode": app_auth_mode, "app_auth_user": app_auth_user,
-            "refresh": refresh, "direct_credentials": direct_credentials,
+            "refresh": refresh, "auto_reload": auto_reload,
+            "direct_credentials": direct_credentials,
             "thresholds": thresholds.generic,
             "thresholds_by_node": thresholds.by_node,
             "threshold_colors": bool(data.get("threshold_colors", True)),

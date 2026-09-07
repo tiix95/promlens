@@ -4,7 +4,7 @@
 
 Visualiseur de topologie reseau qui superpose les metriques Prometheus temps reel sur un graphe Vis.js interactif.
 
-Version : **0.20.3**
+Version : **0.21.0**
 
 ## Captures d'ecran
 
@@ -120,6 +120,7 @@ ssl_verify: true
 timeout: 30                               # timeout HTTP en secondes
 proxy: http://proxy.example.com:8080      # optionnel
 refresh: 30                               # intervalle d'auto-refresh par defaut en secondes (defaut: 30)
+auto_reload: false                        # reconstruit le graphe des qu'un fichier de config change (defaut: false)
 
 app_auth:
   mode: none                              # none | basic | cert
@@ -193,6 +194,7 @@ Reference complete et exemples : voir [DOC.fr.md](DOC.fr.md)
 | `GET` | `/api/topology` | topology.yaml parse |
 | `GET` | `/api/layout` | Positions de noeuds et etats d'affichage sauvegardes |
 | `POST` | `/api/layout` | Sauvegarde les positions de noeuds et les etats d'affichage |
+| `GET` | `/api/mtime` | Dates de modification des deux fichiers de configuration |
 | `POST` | `/api/reload` | Valide et recharge les deux fichiers de configuration |
 | `GET` | `/login` | Page de login (mode basic uniquement) |
 | `POST` | `/api/auth/login` | Authentifie et renvoie un cookie de session |
@@ -224,6 +226,7 @@ Reference complete et exemples : voir [DOC.fr.md](DOC.fr.md)
 - Layout persistant -- positions et etats d'affichage sauvegardes cote serveur
 - Webhooks d'alerte -- notifications cote serveur pour les alertes calculees par ProMLens lui-meme (seuils, noeud down, unites systemd en echec), aucune regle d'alerting Prometheus requise
 - Rechargement de configuration -- le bouton RELOAD valide et recharge a chaud les deux fichiers YAML
+- Rechargement automatique -- avec `auto_reload: true`, modifier `promlens.yaml` ou `topology.yaml` reconstruit le graphe en moins de 5 secondes, sans attendre l'intervalle de rafraichissement
 - Securite -- rate limiting, protection CSRF, entetes CSP
 
 ## Licence

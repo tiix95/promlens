@@ -4,7 +4,7 @@
 
 Network topology visualizer that overlays real-time Prometheus metrics on an interactive Vis.js graph.
 
-Version: **0.20.3**
+Version: **0.21.0**
 
 ## Screenshots
 
@@ -119,6 +119,7 @@ ssl_verify: true
 timeout: 30                               # HTTP timeout in seconds
 proxy: http://proxy.example.com:8080      # optional
 refresh: 30                               # default auto-refresh interval in seconds (default: 30)
+auto_reload: false                        # rebuild the graph as soon as a config file changes (default: false)
 
 app_auth:
   mode: none                              # none | basic | cert
@@ -193,6 +194,7 @@ Full reference and examples: see [DOC.md](DOC.md)
 | `GET` | `/api/layout` | Saved node positions and view toggles |
 | `POST` | `/api/layout` | Save node positions and view toggles |
 | `POST` | `/api/reload` | Validate and reload both config files |
+| `GET` | `/api/mtime` | Modification times of both config files |
 | `GET` | `/login` | Login page (basic auth mode only) |
 | `POST` | `/api/auth/login` | Authenticate, receive session cookie |
 | `POST` | `/api/auth/logout` | Clear session cookie |
@@ -223,6 +225,7 @@ Full reference and examples: see [DOC.md](DOC.md)
 - Persistent layout — positions and toggle state saved server-side
 - Alert webhooks — server-side notifications for the alerts ProMLens computes itself (thresholds, node down, failed systemd units), no Prometheus alerting rule required
 - Config reload — RELOAD button validates and hot-reloads both YAML files
+- Auto-reload — with `auto_reload: true`, editing `promlens.yaml` or `topology.yaml` rebuilds the graph within 5 seconds, without waiting for the refresh interval
 - Security — rate limiting, CSRF protection, CSP headers
 
 ## License

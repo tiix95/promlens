@@ -3150,6 +3150,41 @@ function scheduleRefresh() {
   if (s > 0) refreshTimer = setInterval(fetchAll, s*1000);
 }
 
+// ── Auto-reload : rebuild as soon as a config file changes on disk ──
+const AUTO_RELOAD_POLL_MS = 5000;
+let autoReload      = false;
+let autoReloadTimer = null;
+let lastFileStamp   = null;
+
+async function checkFileChanges() {
+  let stamp;
+  try {
+    const r = await fetch('/api/mtime');
+    if (!r.ok) return;
+    const m = await r.json();
+    stamp = `${m.config}|${m.topology}`;
+  } catch (_) { return; }
+
+  if (lastFileStamp === null) { lastFileStamp = stamp; return; } // baseline
+  if (stamp === lastFileStamp) return;
+  lastFileStamp = stamp;
+
+  // Validate first: an editor saving a half-written file would otherwise
+  // surface a parse error. Skip this round and retry on the next save.
+  try {
+    const v = await fetch('/api/reload', { method: 'POST' });
+    if (!v.ok) { console.warn('auto-reload: config files not valid yet, skipping'); return; }
+  } catch (_) { return; }
+
+  await fetchAll();
+}
+
+function scheduleAutoReload() {
+  clearInterval(autoReloadTimer);
+  autoReloadTimer = null;
+  if (autoReload) autoReloadTimer = setInterval(checkFileChanges, AUTO_RELOAD_POLL_MS);
+}
+
 function promBody(metric = 'up{exporter="node"}') {
   return JSON.stringify({ metric, mode: 'instant' });
 }
@@ -3727,6 +3762,9 @@ async function fetchAll() {
         // Apply server default only if the user has not set a preference
         if (!localStorage.getItem(REFRESH_LS_KEY) && sel.value !== val) { sel.value = val; scheduleRefresh(); }
       }
+      // Re-schedule only on change: fetchAll runs every cycle and would
+      // otherwise restart the poll countdown each time.
+      if (!!d.auto_reload !== autoReload) { autoReload = !!d.auto_reload; scheduleAutoReload(); }
       thresholdColors = d.threshold_colors !== false;
       if (d.thresholds)         thresholds        = d.thresholds;
       if (d.thresholds_by_node) thresholdsByNode  = d.thresholds_by_node;

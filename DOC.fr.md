@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.20.3**
+Version : **0.21.0**
 
 ---
 
@@ -65,7 +65,7 @@ Surchargez avec des variables d'environnement (voir section 8).
 
 ## 3. Configuration — promlens.yaml
 
-Ce fichier est lu à chaque requête. Toute modification prend effet immédiatement sans redémarrage du serveur (utilisez le bouton RELOAD de l'interface ou `POST /api/reload` pour forcer un rafraîchissement du graphe).
+Ce fichier est lu à chaque requête. Toute modification prend effet immédiatement sans redémarrage du serveur (utilisez le bouton RELOAD de l'interface ou `POST /api/reload` pour forcer un rafraîchissement du graphe, ou activez [auto_reload](#option-auto_reload) pour reconstruire le graphe à l'enregistrement).
 
 ### Connexion Prometheus
 
@@ -100,7 +100,29 @@ proxy: http://proxy:8080   # proxy HTTP optionnel
 | `timeout` | int | `30` | Timeout des requêtes HTTP en secondes |
 | `proxy` | string | aucun | URL du proxy HTTP |
 | `refresh` | int | `30` | Intervalle de rafraîchissement automatique affiché par défaut dans l'interface (secondes) |
+| `auto_reload` | bool | `false` | Reconstruit le graphe dès que `promlens.yaml` ou `topology.yaml` change sur le disque |
 | `direct_credentials` | bool | `false` | Mode cert uniquement : le navigateur envoie le certificat client dans les requêtes Prometheus directes |
+
+### Option auto_reload
+
+Declenche une reconstruction du graphe des que `topology.yaml` ou `promlens.yaml` change sur le disque. Le defaut est `false`.
+
+```yaml
+auto_reload: true
+```
+
+Les deux fichiers etaient deja relus a chaque cycle de rafraichissement : `GET /api/topology` et `GET /api/config` analysent leur fichier a chaque requete, donc une modification finissait toujours par etre prise en compte. Cette option change seulement **quand** la reconstruction est declenchee, pas ce qui est reconstruit. Sans elle, une modification apparait au bout de `refresh` secondes au maximum (30 par defaut) ou au clic sur RELOAD.
+
+Avec `auto_reload: true`, l'interface interroge `GET /api/mtime` toutes les 5 secondes. Quand la date de modification de l'un des deux fichiers change, elle :
+
+1. Appelle `POST /api/reload` pour valider les deux fichiers YAML.
+2. Lance un rafraichissement complet (`fetchAll()`), uniquement si la validation a reussi.
+
+Si la validation echoue -- typiquement un editeur qui ecrit un fichier a moitie enregistre -- le tour est saute et un warning est journalise dans la console du navigateur. Le prochain enregistrement est reessaye, donc une erreur d'analyse transitoire ne bloque jamais le graphe.
+
+Avec `auto_reload: false` (le defaut), rien n'est interroge : le graphe se rafraichit toujours a son intervalle normal et le bouton RELOAD fonctionne toujours.
+
+L'intervalle de poll de 5 secondes est une constante fixe (`AUTO_RELOAD_POLL_MS` dans `src/static/index.html`), il n'est pas configurable.
 
 ### Section app_auth
 
@@ -792,6 +814,30 @@ curl -s -X POST http://127.0.0.1:8001/api/reload
 # {"detail": "topology.yaml: mapping values are not allowed here\n  line 5, column 3"}
 ```
 
+### GET /api/mtime
+
+Renvoie la date de modification de `promlens.yaml` et `topology.yaml` en timestamps Unix. Utilise par le frontend quand [auto_reload](#option-auto_reload) est active, pour detecter un changement de fichier sans rien reanalyser.
+
+Un fichier absent ou impossible a stat est renvoye a `0.0`. Pas de rate limiting : l'endpoint ne fait que deux appels `stat()`.
+
+```bash
+curl -s http://127.0.0.1:8001/api/mtime | jq .
+```
+
+```json
+{
+  "config": 1788470740.451429,
+  "topology": 1788470741.299453
+}
+```
+
+| Champ | Type | Description |
+|---|---|---|
+| `config` | float | Date de modification de `promlens.yaml` (`CONFIG_FILE`) |
+| `topology` | float | Date de modification de `topology.yaml` (`TOPOLOGY_FILE`) |
+
+Soumis a la meme authentification que les autres routes `/api/`.
+
 ### GET /api/alerts
 
 Relaie `GET /api/v1/alerts` depuis Prometheus et renvoie le tableau d'objets d'alerte. Utilisé par le frontend pour alimenter le panneau d'alertes et les surcouches sur les noeuds. Indisponible en mode cert (le navigateur récupère alors les alertes directement depuis Prometheus).
@@ -932,6 +978,8 @@ Chaque cycle de rafraîchissement exécute celles-ci en parallèle avec `Promise
 | 21 | Backend / Prometheus | `GET /api/alerts` (relayé) ou `GET /api/v1/alerts` (mode cert, direct) | Alertes Prometheus actives |
 
 Les requêtes 15 à 20 sont ignorées (la Promise se résout immédiatement) quand leur intégration est désactivée. Les requêtes 15 à 18 sont également ignorées quand leur rôle a une liste de modules vide dans [blackbox.modules](#blackboxmodules). La requête 21 s'exécute toujours ; elle renvoie un tableau vide en cas d'erreur, de sorte qu'une panne de l'alertmanager Prometheus ne bloque pas le graphe.
+
+`GET /api/mtime` ne fait pas partie de ce lot : quand [auto_reload](#option-auto_reload) est active, il tourne sur son propre timer de 5 secondes et ne declenche un `fetchAll()` complet que si un fichier de configuration a change.
 
 ### Phases de buildGraph
 
@@ -1355,3 +1403,5 @@ Les caméras `front-door` et `backyard` apparaissent comme des noeuds rattachés
 - **La livraison des webhooks est en best effort** : un POST en échec est journalisé puis abandonné, sans réessai ni file d'attente. Les alertes qui se déclenchent et se résolvent dans une même fenêtre d'`interval` ne sont jamais notifiées.
 
 - **Le rechargement YAML ne fait qu'analyser la syntaxe** : `POST /api/reload` valide la syntaxe avec `yaml.safe_load` mais ne valide ni les valeurs ni les types des champs. Un champ `url` invalide passe la validation de rechargement mais provoque un HTTP 503 à la requête suivante.
+
+- **auto_reload ne surveille que la mtime** : la detection compare la date de modification renvoyee par `GET /api/mtime`. Un fichier reecrit avec une mtime inchangee n'est pas detecte, et le polling ajoute une requete toutes les 5 secondes par onglet ouvert. Comme le declencheur est un rafraichissement complet, la meme reserve que ci-dessus s'applique : une configuration qui s'analyse mais qui est semantiquement fausse est rechargee comme une autre.
