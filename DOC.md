@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.16.1**
+Version: **0.17.0**
 
 ---
 
@@ -972,7 +972,8 @@ ifaceRatio = max(rx, tx) / speed
 | Fullscreen | Enters fullscreen mode; shows a floating toolbar |
 | VIEWS dropdown | Toggles zones, tunnels, ICMP-UP links, SSH-UP links, legend, and guest visibility by kind and state |
 | Refresh interval | 10s / 30s / 1m / 5m / off |
-| Search | Focus and blink a node by label or ID (press `/` to focus the input) |
+| Search | Focus and blink a node or a zone by label or ID (press `/` to focus the input) |
+| Search modal | `Ctrl+F` / `Cmd+F` opens a command-palette search over visible nodes and zones |
 
 **Node click:** single-click focuses the node (hides unrelated edges). Double-click opens the detail modal. If `camera_url` is configured, clicking a Frigate camera node opens `camera_url/#camera_name` in a new window.
 
@@ -980,6 +981,48 @@ ifaceRatio = max(rx, tx) / speed
 - Blackbox edge: opens Prometheus graph for `probe_success{instance="..."}`.
 - WireGuard tunnel: opens Prometheus graph for RX/TX of the WireGuard interface.
 - Normal server link: opens Prometheus graph for RX/TX of the server instance.
+
+#### Search modal
+
+`Ctrl+F` (`Cmd+F` on macOS) opens `<dialog id="searchModal">` instead of the browser's native find bar. The shortcut is ignored while the Prometheus alerts page is open.
+
+The modal holds an input, a live-filtered result list (30 entries max) and a footer hint. Each row shows the entry label and its kind badge (`server`, `vm`, `lxc`, `router`, `zone`, ...).
+
+**Searchable entries**, in this order:
+
+1. Every currently displayed node.
+2. Every currently displayed root zone.
+
+Nodes hidden by the guest visibility toggles and zones hidden by the zones toggle are not searchable. Only root zones are drawn, so nested zones are folded into their root zone bubble and are not searchable on their own.
+
+**Matching ranks**, lower is better:
+
+| Rank | Condition |
+|---|---|
+| 0 | Label equals the query |
+| 1 | Label starts with the query |
+| 2 | Label contains the query |
+| 3 | Node ID or zone ID contains the query |
+
+Sorting is stable, so nodes stay ahead of zones at equal rank.
+
+**Keys inside the modal:**
+
+| Key | Action |
+|---|---|
+| Up / Down | Move the selection in the result list |
+| Enter | Zoom on the selected entry |
+| Escape | Close the modal |
+| `Ctrl+F` | Re-select the input text |
+
+Clicking a row selects it as well.
+
+**Zoom behaviour:**
+
+- Node: `network.focus()` at scale 1.5, plus a 1.5s cyan blink ring around the node. Same result as the top-bar search bar.
+- Zone: the view centers on the zone bubble and zooms so the bubble fits the canvas with a small margin, scale capped at 1.5, then the bubble outline blinks cyan for 1.5s.
+
+The top-bar search bar (and its `/` shortcut) now matches zones too, using the same ranking. Pressing Enter there zooms on the best match, node or zone.
 
 #### Guest visibility toggles
 

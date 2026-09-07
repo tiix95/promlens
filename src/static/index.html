@@ -171,6 +171,24 @@
     .ntm-body{padding:14px 16px;font-family:var(--mono);font-size:11px;line-height:1.75;max-height:60vh;overflow-y:auto}
     .ntm-body br{display:block;margin:0}
 
+    /* -- SEARCH MODAL (ctrl+f) -- */
+    #searchModal{border:1px solid var(--border-hi);border-radius:var(--radius);background:var(--bg2);color:var(--text1);padding:0;width:460px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.85);outline:none;position:fixed;top:18%;left:50%;transform:translateX(-50%);margin:0}
+    #searchModal::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
+    .sm-hdr{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--border)}
+    .sm-icon{color:var(--accent);font-size:13px;flex-shrink:0}
+    .sm-input{flex:1;background:none;border:none;outline:none;color:var(--text0);font-family:var(--mono);font-size:13px}
+    .sm-input::placeholder{color:var(--text2)}
+    .sm-list{max-height:46vh;overflow-y:auto;padding:6px}
+    .sm-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:4px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text1)}
+    .sm-item:hover{background:var(--bg3)}
+    .sm-item.sel{background:var(--accent-dim);color:var(--text0);box-shadow:inset 0 0 0 1px var(--accent-border)}
+    .sm-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .sm-kind{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text2);flex-shrink:0}
+    .sm-item.sel .sm-kind{color:var(--accent)}
+    .sm-empty{padding:14px 10px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text2)}
+    .sm-ftr{display:flex;gap:14px;padding:8px 14px;border-top:1px solid var(--border);font-family:var(--mono);font-size:9px;color:var(--text2)}
+    .sm-ftr kbd{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:1px 4px;font-family:var(--mono);font-size:9px;color:var(--text1)}
+
     /* -- ALERTS PAGE -- */
     #alertsPage{display:none;flex-direction:column;height:100vh;position:relative;z-index:1}
     .ap-hdr{height:var(--hdr);padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0}
@@ -2250,7 +2268,7 @@ function stopAlertBlink()  {
 }
 let focusedNodeId  = null;
 let blinkAnimId    = null;
-let searchBlink    = null; // { nodeId, startTime }
+let searchBlink    = null; // { nodeId, startTime } or { zoneId, startTime }
 let searchBlinkId  = null;
 
 function blinkLoop() {
@@ -2297,21 +2315,132 @@ function openNodeModal(nodeId) {
   modal.showModal();
 }
 
-function searchNode(query) {
-  if (!network || !query.trim()) return;
+// -- SEARCH (top bar + ctrl+f modal) --------------------------
+// Searchable entries: every displayed node, then every displayed zone.
+function searchCandidates() {
+  if (!network) return [];
+  const nodes = network.body.data.nodes.get().map(n => ({
+    type:  'node',
+    id:    n.id,
+    label: (n.label || n.id).replace(/\n/g, ' ').replace(/…/g, '').trim(),
+    alt:   n.id.startsWith('__srv__') ? n.id.slice(7) : n.id,
+    kind:  n._iconFn || 'node',
+  }));
+  const zones = zoneRenderData.zones.map(z => ({
+    type:  'zone',
+    id:    z.id,
+    label: z.label || z.id,
+    alt:   z.id,
+    kind:  'zone',
+  }));
+  return [...nodes, ...zones];
+}
+
+// Match rank, lower is better; null when the entry does not match at all.
+function searchRank(entry, q) {
+  const label = entry.label.toLowerCase();
+  if (label === q)         return 0;
+  if (label.startsWith(q)) return 1;
+  if (label.includes(q))   return 2;
+  if (entry.alt.toLowerCase().includes(q)) return 3;
+  return null;
+}
+
+// Sort is stable, so nodes stay ahead of zones at equal rank.
+function searchMatches(query) {
   const q = query.trim().toLowerCase();
-  const all = network.body.data.nodes.get();
-  let hit = all.find(n => (n.label || '').toLowerCase() === q);
-  if (!hit) hit = all.find(n => (n.label || '').replace('…', '').toLowerCase().startsWith(q));
-  if (!hit) hit = all.find(n => (n.label || '').toLowerCase().includes(q));
-  if (!hit) hit = all.find(n => {
-    const id = n.id.startsWith('__srv__') ? n.id.slice(7) : n.id;
-    return id.toLowerCase().includes(q);
-  });
-  if (!hit) return;
-  network.focus(hit.id, { scale: 1.5, animation: { duration: 700, easingFunction: 'easeOutQuart' } });
-  searchBlink = { nodeId: hit.id, startTime: Date.now() };
+  if (!q) return [];
+  return searchCandidates()
+    .map(e => ({ ...e, rank: searchRank(e, q) }))
+    .filter(e => e.rank !== null)
+    .sort((a, b) => a.rank - b.rank);
+}
+
+function startSearchBlink(blink) {
+  searchBlink = { ...blink, startTime: Date.now() };
   if (!searchBlinkId) searchBlinkLoop();
+}
+
+function focusSearchHit(hit) {
+  if (!network) return;
+  if (hit.type === 'zone') {
+    const zone = zoneRenderData.zones.find(z => z.id === hit.id);
+    const c    = zone && zoneCircle(network, zone, zoneRenderData.zoneMembers);
+    if (!c) return;
+    // Center the bubble and zoom so it fits the canvas with a small margin
+    const canvas = network.canvas.frame.canvas;
+    const scale  = Math.min(canvas.clientWidth, canvas.clientHeight) / (2 * c.r * 1.15);
+    network.moveTo({
+      position: { x: c.cx, y: c.cy },
+      scale:    Math.min(scale, 1.5),
+      animation: { duration: 700, easingFunction: 'easeOutQuart' },
+    });
+    startSearchBlink({ zoneId: hit.id });
+  } else {
+    network.focus(hit.id, { scale: 1.5, animation: { duration: 700, easingFunction: 'easeOutQuart' } });
+    startSearchBlink({ nodeId: hit.id });
+  }
+}
+
+function searchNode(query) {
+  const hit = searchMatches(query)[0];
+  if (hit) focusSearchHit(hit);
+}
+
+// -- SEARCH MODAL ---------------------------------------------
+const SM_MAX_RESULTS = 30;
+let smResults = [];
+let smIndex   = 0;
+
+function openSearchModal() {
+  const modal = $('searchModal');
+  const input = $('smInput');
+  if (modal.open) { input.focus(); input.select(); return; }
+  input.value = '';
+  renderSearchResults('');
+  modal.showModal();
+}
+
+function renderSearchResults(query) {
+  smResults = searchMatches(query).slice(0, SM_MAX_RESULTS);
+  smIndex   = 0;
+  const list = $('smList');
+  if (!query.trim() || smResults.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'sm-empty';
+    empty.textContent = query.trim() ? 'no match' : 'type a node or zone name';
+    list.replaceChildren(empty);
+    return;
+  }
+  list.replaceChildren(...smResults.map((r, i) => {
+    const item = document.createElement('div');
+    item.className = 'sm-item' + (i === 0 ? ' sel' : '');
+    const label = document.createElement('span');
+    label.className = 'sm-label';
+    label.textContent = r.label;
+    const kind = document.createElement('span');
+    kind.className = 'sm-kind';
+    kind.textContent = r.kind;
+    item.append(label, kind);
+    item.addEventListener('click', () => selectSearchResult(i));
+    return item;
+  }));
+}
+
+function moveSearchSel(delta) {
+  if (smResults.length === 0) return;
+  const items = $('smList').children;
+  items[smIndex].classList.remove('sel');
+  smIndex = (smIndex + delta + smResults.length) % smResults.length;
+  items[smIndex].classList.add('sel');
+  items[smIndex].scrollIntoView({ block: 'nearest' });
+}
+
+function selectSearchResult(i) {
+  const hit = smResults[i];
+  if (!hit) return;
+  $('searchModal').close();
+  focusSearchHit(hit);
 }
 
 const ZONE_FILLS   = ['rgba(74,138,223,.10)','rgba(155,109,255,.10)','rgba(45,186,110,.10)','rgba(224,151,42,.10)','rgba(0,207,255,.10)'];
@@ -2346,18 +2475,24 @@ function zoneBubbleCircle(memberPts, parentPt, pad) {
   return { cx: parentPt.x + dirX * hi, cy: parentPt.y + dirY * hi, r: hi };
 }
 
+// Bubble geometry of a displayed zone, or null when it has no positioned member.
+function zoneCircle(net, z, zoneMembers) {
+  const members = zoneMembers[z.id];
+  if (!members || members.length === 0) return null;
+
+  const pos       = net.getPositions(z.parent ? [...members, z.parent] : members);
+  const memberPts = members.map(id => pos[id]).filter(Boolean);
+  if (memberPts.length === 0) return null;
+  const parentPt  = z.parent ? (pos[z.parent] ?? null) : null;
+
+  return zoneBubbleCircle(memberPts, parentPt, 42);
+}
+
 function drawZoneBubbles(ctx, net, zones, zoneMembers) {
   zones.forEach((z, i) => {
-    const members = zoneMembers[z.id];
-    if (!members || members.length === 0) return;
-
-    const pos       = net.getPositions(z.parent ? [...members, z.parent] : members);
-    const memberPts = members.map(id => pos[id]).filter(Boolean);
-    if (memberPts.length === 0) return;
-    const parentPt  = z.parent ? (pos[z.parent] ?? null) : null;
-
-    const pad    = 42;
-    const { cx, cy, r } = zoneBubbleCircle(memberPts, parentPt, pad);
+    const circle = zoneCircle(net, z, zoneMembers);
+    if (!circle) return;
+    const { cx, cy, r } = circle;
     const fill   = ZONE_FILLS[i % ZONE_FILLS.length];
     const stroke = ZONE_STROKES[i % ZONE_STROKES.length];
 
@@ -2560,15 +2695,22 @@ function renderVisNetwork(nodes, edges, zones = [], zoneMembers = {}) {
     if (searchBlink) {
       const elapsed = Date.now() - searchBlink.startTime;
       if (Math.floor(elapsed / 250) % 2 === 0) {
-        const p = network.getPositions([searchBlink.nodeId])[searchBlink.nodeId];
-        if (p) {
+        let c = null;
+        if (searchBlink.zoneId) {
+          const z = zoneRenderData.zones.find(zz => zz.id === searchBlink.zoneId);
+          if (z) c = zoneCircle(network, z, zoneRenderData.zoneMembers);
+        } else {
+          const p = network.getPositions([searchBlink.nodeId])[searchBlink.nodeId];
+          if (p) c = { cx: p.x, cy: p.y, r: 32 };
+        }
+        if (c) {
           ctx.save();
           ctx.strokeStyle = '#00cfff';
           ctx.lineWidth = 3;
           ctx.shadowColor = '#00cfff';
           ctx.shadowBlur = 16;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, 32, 0, Math.PI * 2);
+          ctx.arc(c.cx, c.cy, c.r, 0, Math.PI * 2);
           ctx.stroke();
           ctx.restore();
         }
@@ -3691,7 +3833,22 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Enter') { searchNode(e.target.value); e.target.blur(); }
     if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
   });
+  $('smInput').addEventListener('input', e => renderSearchResults(e.target.value));
+  $('smInput').addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); moveSearchSel(1); }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); moveSearchSel(-1); }
+    if (e.key === 'Enter')     { e.preventDefault(); selectSearchResult(smIndex); }
+  });
+
   document.addEventListener('keydown', e => {
+    // Ctrl+F (Cmd+F on mac): search modal, replaces the browser find bar
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+      if ($('alertsPage').style.display === 'flex') return;
+      e.preventDefault();
+      openSearchModal();
+      return;
+    }
+    if ($('searchModal').open) return; // the modal handles its own keys
     if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
       e.preventDefault(); $('searchInput').focus(); $('searchInput').select();
     }
@@ -3715,6 +3872,19 @@ window.addEventListener('DOMContentLoaded', async () => {
     <button class="ntm-close" onclick="document.getElementById('nodeTipModal').close()">✕</button>
   </div>
   <div id="ntmBody" class="ntm-body"></div>
+</dialog>
+
+<dialog id="searchModal">
+  <div class="sm-hdr">
+    <span class="sm-icon">⊙</span>
+    <input id="smInput" class="sm-input" type="text" placeholder="search a node or a zone…" autocomplete="off" spellcheck="false">
+  </div>
+  <div id="smList" class="sm-list"></div>
+  <div class="sm-ftr">
+    <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+    <span><kbd>enter</kbd> zoom</span>
+    <span><kbd>esc</kbd> close</span>
+  </div>
 </dialog>
 </body>
 </html>

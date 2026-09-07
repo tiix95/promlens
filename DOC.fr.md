@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.16.1**
+Version : **0.17.0**
 
 ---
 
@@ -972,7 +972,8 @@ ifaceRatio = max(rx, tx) / speed
 | Plein écran | Passe en plein écran ; affiche une barre d'outils flottante |
 | Menu VIEWS | Bascule les zones, les tunnels, les liens ICMP-UP, les liens SSH-UP, la légende, et la visibilité des invités par type et par état |
 | Intervalle de rafraîchissement | 10s / 30s / 1m / 5m / off |
-| Recherche | Cible et fait clignoter un noeud par libellé ou par ID (appuyez sur `/` pour placer le focus dans le champ) |
+| Recherche | Cible et fait clignoter un noeud ou une zone par libellé ou par ID (appuyez sur `/` pour placer le focus dans le champ) |
+| Fenêtre de recherche | `Ctrl+F` / `Cmd+F` ouvre une recherche de type palette de commandes sur les noeuds et zones visibles |
 
 **Clic sur un noeud :** un simple clic met le noeud en avant (masque les liens non liés). Un double-clic ouvre la fenêtre de détail. Si `camera_url` est configuré, cliquer sur un noeud caméra Frigate ouvre `camera_url/#camera_name` dans une nouvelle fenêtre.
 
@@ -980,6 +981,48 @@ ifaceRatio = max(rx, tx) / speed
 - Lien blackbox : ouvre le graphe Prometheus de `probe_success{instance="..."}`.
 - Tunnel WireGuard : ouvre le graphe Prometheus des RX/TX de l'interface WireGuard.
 - Lien serveur normal : ouvre le graphe Prometheus des RX/TX de l'instance serveur.
+
+#### Fenêtre de recherche
+
+`Ctrl+F` (`Cmd+F` sur macOS) ouvre `<dialog id="searchModal">` à la place de la barre de recherche native du navigateur. Le raccourci est ignoré tant que la page des alertes Prometheus est ouverte.
+
+La fenêtre contient un champ de saisie, une liste de résultats filtrée en direct (30 entrées maximum) et une ligne d'aide en pied. Chaque ligne affiche le libellé de l'entrée et son badge de type (`server`, `vm`, `lxc`, `router`, `zone`, ...).
+
+**Entrées cherchables**, dans cet ordre :
+
+1. Tous les noeuds actuellement affichés.
+2. Toutes les zones racines actuellement affichées.
+
+Les noeuds masqués par les bascules de visibilité des invités et les zones masquées par la bascule des zones ne sont pas cherchables. Seules les zones racines sont dessinées : les zones imbriquées sont repliées dans la bulle de leur zone racine et ne sont donc pas cherchables séparément.
+
+**Rangs de correspondance**, du meilleur au moins bon :
+
+| Rang | Condition |
+|---|---|
+| 0 | Le libellé est égal à la requête |
+| 1 | Le libellé commence par la requête |
+| 2 | Le libellé contient la requête |
+| 3 | L'ID du noeud ou de la zone contient la requête |
+
+Le tri est stable : à rang égal, les noeuds restent devant les zones.
+
+**Touches dans la fenêtre :**
+
+| Touche | Action |
+|---|---|
+| Haut / Bas | Déplace la sélection dans la liste de résultats |
+| Entrée | Zoome sur l'entrée sélectionnée |
+| Échap | Ferme la fenêtre |
+| `Ctrl+F` | Resélectionne le texte du champ |
+
+Cliquer sur une ligne la sélectionne également.
+
+**Comportement du zoom :**
+
+- Noeud : `network.focus()` à l'échelle 1.5, plus un anneau cyan clignotant autour du noeud pendant 1,5 s. Résultat identique à celui de la barre de recherche du bandeau.
+- Zone : la vue se centre sur la bulle de zone et zoome pour que la bulle tienne dans le canvas avec une petite marge, échelle plafonnée à 1.5, puis le contour de la bulle clignote en cyan pendant 1,5 s.
+
+La barre de recherche du bandeau (et son raccourci `/`) correspond désormais aussi aux zones, avec le même classement. Y appuyer sur Entrée zoome sur la meilleure correspondance, noeud ou zone.
 
 #### Bascules de visibilité des invités
 

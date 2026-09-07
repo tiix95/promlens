@@ -4,7 +4,7 @@
 
 Visualiseur de topologie reseau qui superpose les metriques Prometheus temps reel sur un graphe Vis.js interactif.
 
-Version : **0.16.1**
+Version : **0.17.0**
 
 ## Captures d'ecran
 
@@ -210,6 +210,7 @@ Reference complete et exemples : voir [DOC.fr.md](DOC.fr.md)
 - Cameras Frigate -- un noeud par camera, vert=en ligne, rouge=hors ligne
 - VMs libvirt -- liste des VMs avec leur etat dans les tooltips de l'hyperviseur
 - Visibilite des invites -- masquer les noeuds VM / LXC / POD par etat (unmonitored, down, up) depuis le menu VIEWS
+- Fenetre de recherche -- `Ctrl+F` (`Cmd+F` sur macOS) ouvre une palette de commandes sur les noeuds et zones visibles, fleches pour naviguer, Entree pour zoomer
 - Layout persistant -- positions et etats d'affichage sauvegardes cote serveur
 - Webhooks d'alerte -- notifications cote serveur pour les alertes calculees par ProMLens lui-meme (seuils, noeud down, unites systemd en echec), aucune regle d'alerting Prometheus requise
 - Rechargement de configuration -- le bouton RELOAD valide et recharge a chaud les deux fichiers YAML
