@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.21.0**
+Version: **0.22.1**
 
 ---
 
@@ -244,7 +244,11 @@ blackbox:
   destination_label: parent      # many probes share parent="synacktiv"
 ```
 
-Each probe keeps its real target, read as `instance_label` value, then `instance`, then the `destination_label` value. Probes are deduplicated on that target, so no probe is discarded and no failing probe is hidden.
+Each probe keeps its real target, read as the `destination_label` value, then the `instance_label` value, then `instance`. The order is reversed when `destination_label` points at a group label: one group value cannot name each probe, so the target is read as the `instance_label` value, then `instance`, then the `destination_label` value. Probes are deduplicated on that target, so no probe is discarded and no failing probe is hidden.
+
+**Group detection is automatic.** No option declares a group label. `destination_label` is treated as a group label as soon as one of its values covers several distinct probe targets (distinct `instance_label`/`instance` values) coming from the same source (`source_label` value, or no source at all). The check runs once per config over all ICMP and SSH series, so a group holding a single probe behaves like every other group. Probes reaching the same destination from different sources are not a group.
+
+Reading `destination_label` first matters in multi-source setups where `instance` holds the blackbox exporter or the source host: the old order printed rows such as `ICMP server1 -> server1`.
 
 In the node tooltip, each probe row names its own target, whatever the number of probes on the node. A single probe on the node names the probed host, not the node:
 
@@ -269,7 +273,7 @@ Consequences:
 - **Node status**: the node turns orange as soon as any one of its probes is down.
 - **Issues panel**: it follows its own rule, since its entry already leads with the node label. Failing probes are listed as `icmp <target>` when the node carries several targets, `icmp` alone otherwise. Entries are deduplicated.
 - **Graph edge**: the edge between the two nodes keeps one entry per probe. Its tooltip prints a `targets:` line and tags each probe row with its target.
-- **Edge click**: opens `probe_success{instance="<target>"}` for the real probe target, not the group value.
+- **Edge click**: opens `probe_success{<destination_label>="<target>"}` for the real probe target. The query uses the label the target was read from, so it becomes `probe_success{instance="<target>"}` (the `instance_label` label) when `destination_label` is a group label.
 
 **Series without the group label.** A probe that does not carry the configured label is no longer dropped: it falls back to the default label of the option it is missing.
 
@@ -1141,7 +1145,7 @@ ifaceRatio = max(rx, tx) / speed
 **Node click:** single-click focuses the node (hides unrelated edges). Double-click opens the detail modal. If `camera_url` is configured, clicking a Frigate camera node opens `camera_url/#camera_name` in a new window.
 
 **Edge click:**
-- Blackbox edge: opens Prometheus graph for `probe_success{instance="..."}`, using the probe's real target (not the `destination_label` value when it is a group label).
+- Blackbox edge: opens Prometheus graph for `probe_success{...="..."}` on the probe's real target, using the label that target was read from: `destination_label` normally, `instance_label` (default `instance`) when `destination_label` is a group label.
 - WireGuard tunnel: opens Prometheus graph for RX/TX of the WireGuard interface.
 - Normal server link: opens Prometheus graph for RX/TX of the server instance.
 

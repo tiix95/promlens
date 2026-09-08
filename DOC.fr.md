@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.21.0**
+Version : **0.22.1**
 
 ---
 
@@ -244,7 +244,11 @@ blackbox:
   destination_label: parent      # plusieurs sondes partagent parent="synacktiv"
 ```
 
-Chaque sonde conserve sa cible reelle, lue comme valeur de `instance_label`, puis `instance`, puis la valeur de `destination_label`. Les sondes sont dedupliquees sur cette cible, donc aucune sonde n'est perdue et aucune sonde en echec n'est masquee.
+Chaque sonde conserve sa cible reelle, lue comme la valeur de `destination_label`, puis la valeur de `instance_label`, puis `instance`. L'ordre s'inverse quand `destination_label` pointe sur un label de groupe : une valeur de groupe ne peut pas nommer chaque sonde, donc la cible est lue comme la valeur de `instance_label`, puis `instance`, puis la valeur de `destination_label`. Les sondes sont dedupliquees sur cette cible, donc aucune sonde n'est perdue et aucune sonde en echec n'est masquee.
+
+**La detection de groupe est automatique.** Aucune option ne declare un label de groupe. `destination_label` est traite comme un label de groupe des qu'une de ses valeurs couvre plusieurs cibles de sonde distinctes (valeurs `instance_label`/`instance` distinctes) venant de la meme source (valeur de `source_label`, ou aucune source). Le test est fait une fois par config sur l'ensemble des series ICMP et SSH, donc un groupe ne contenant qu'une sonde se comporte comme les autres. Des sondes qui atteignent la meme destination depuis des sources differentes ne forment pas un groupe.
+
+Lire `destination_label` en premier compte dans les configurations multi-sources ou `instance` contient l'exporteur blackbox ou l'hote source : l'ancien ordre affichait des lignes du type `ICMP server1 -> server1`.
 
 Dans le tooltip du noeud, chaque ligne de sonde nomme sa propre cible, quel que soit le nombre de sondes sur le noeud. Une sonde unique nomme l'hote sonde, pas le noeud :
 
@@ -269,7 +273,7 @@ Consequences :
 - **Etat du noeud** : le noeud passe en orange des qu'une seule de ses sondes est down.
 - **Panneau issues** : il suit sa propre regle, car son entree commence deja par le label du noeud. Les sondes en echec sont listees `icmp <cible>` quand le noeud porte plusieurs cibles, `icmp` seul sinon. Les entrees sont dedupliquees.
 - **Lien du graphe** : le lien entre les deux noeuds garde une entree par sonde. Son tooltip affiche une ligne `targets:` et tague chaque ligne de sonde avec sa cible.
-- **Clic sur le lien** : ouvre `probe_success{instance="<cible>"}` sur la cible reelle de la sonde, pas sur la valeur du groupe.
+- **Clic sur le lien** : ouvre `probe_success{<destination_label>="<cible>"}` sur la cible reelle de la sonde. La requete utilise le label depuis lequel la cible a ete lue, donc elle devient `probe_success{instance="<cible>"}` (le label `instance_label`) quand `destination_label` est un label de groupe.
 
 **Series sans le label de groupe.** Une sonde qui ne porte pas le label configure n'est plus perdue : elle retombe sur le label par defaut de l'option qui lui manque.
 
@@ -1141,7 +1145,7 @@ ifaceRatio = max(rx, tx) / speed
 **Clic sur un noeud :** un simple clic met le noeud en avant (masque les liens non liés). Un double-clic ouvre la fenêtre de détail. Si `camera_url` est configuré, cliquer sur un noeud caméra Frigate ouvre `camera_url/#camera_name` dans une nouvelle fenêtre.
 
 **Clic sur un lien :**
-- Lien blackbox : ouvre le graphe Prometheus de `probe_success{instance="..."}`, sur la cible réelle de la sonde (pas la valeur de `destination_label` quand c'est un label de groupe).
+- Lien blackbox : ouvre le graphe Prometheus de `probe_success{...="..."}` sur la cible réelle de la sonde, en utilisant le label depuis lequel cette cible a été lue : `destination_label` normalement, `instance_label` (défaut `instance`) quand `destination_label` est un label de groupe.
 - Tunnel WireGuard : ouvre le graphe Prometheus des RX/TX de l'interface WireGuard.
 - Lien serveur normal : ouvre le graphe Prometheus des RX/TX de l'instance serveur.
 

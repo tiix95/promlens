@@ -754,6 +754,31 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
   const bbDestKey    = inst => inst.labels[bbDestLabel]   || bbInstanceOf(inst);
   const bbHttpKey    = inst => inst.labels[httpNodeLabel] || inst.labels.upstream || inst.labels[parentLabel] || '';
 
+  // -- Real probe target (what a probe row names) ----------------
+  // `destination_label` names the target, except when it points at a group
+  // label: one value then covers several targets probed from the same source,
+  // and only `instance` tells them apart. The group case is detected once for
+  // the whole config, so a group holding a single probe reads like the others.
+  // Reading `instance` first is wrong outside that case: with an explicit
+  // destination_label, `instance` often holds the exporter or the source host,
+  // which printed rows such as "ICMP server1 -> server1".
+  const bbSrcOf = inst => (bbSrcLabel ? inst.labels[bbSrcLabel] : '') || '';
+  const bbDestIsGroup = (() => {
+    const targetsPerDest = {};
+    for (const inst of [...(blackboxData?.instances || []), ...(blackboxSshData?.instances || [])]) {
+      const key = `${bbDestKey(inst)}:::${bbSrcOf(inst)}`;
+      if (!targetsPerDest[key]) targetsPerDest[key] = new Set();
+      targetsPerDest[key].add(bbInstanceOf(inst));
+      if (targetsPerDest[key].size > 1) return true;
+    }
+    return false;
+  })();
+  const bbTargetOf = inst => bbDestIsGroup
+    ? (bbInstanceOf(inst) || bbDestKey(inst))
+    : (bbDestKey(inst)    || bbInstanceOf(inst));
+  // Label carrying that target, used to build the Prometheus query on edge click
+  const bbTargetLabel = bbDestIsGroup ? (instLabel || 'instance') : bbDestLabel;
+
   // -- TCP connect index : host -> [{ service, port, tool, probeSuccess }]
   const tcpByHost = {};
   const tcpRawKeys = new Set();
@@ -845,13 +870,13 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     const last = raw.lastIndexOf(':');
     const host = last > 0 ? raw.slice(0, last) : raw;
     if (raw) { bbDestRawKeys.add(raw); rememberProbeParent(raw, inst); }
-    const srcRaw  = bbSrcLabel ? (inst.labels[bbSrcLabel] || '') : '';
+    const srcRaw  = bbSrcOf(inst);
     const srcHost = srcRaw ? (srcRaw.lastIndexOf(':') > 0 ? srcRaw.slice(0, srcRaw.lastIndexOf(':')) : srcRaw) : '';
     const probe = {
       module:       inst.labels.module || '',
       probeSuccess: parseFloat(inst.value) === 1,
       src:          srcRaw || bbPromNode || 'prometheus',
-      target:       bbInstanceOf(inst) || raw,
+      target:       bbTargetOf(inst) || raw,
     };
     [raw, host].filter(Boolean).forEach(k => {
       if (!bbDestByHost[k]) bbDestByHost[k] = [];
@@ -1070,7 +1095,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     const seenPairs = new Set();
     [...(blackboxData?.instances || []), ...(blackboxSshData?.instances || [])].forEach(bi => {
       const destRaw = bbDestKey(bi);
-      const srcRaw  = bbSrcLabel ? (bi.labels[bbSrcLabel] || '') : '';
+      const srcRaw  = bbSrcOf(bi);
       if (!destRaw || !srcRaw) return;
       const destHost = destRaw.lastIndexOf(':') > 0 ? destRaw.slice(0, destRaw.lastIndexOf(':')) : destRaw;
       const srcHost  = srcRaw.lastIndexOf(':') > 0  ? srcRaw.slice(0, srcRaw.lastIndexOf(':'))  : srcRaw;
@@ -2035,7 +2060,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       // Source resolution
       let srcId = promNodeId || '__prometheus__';
       if (bbSrcLabel) {
-        const srcRaw  = inst.labels[bbSrcLabel] || '';
+        const srcRaw  = bbSrcOf(inst);
         const srcLast = srcRaw.lastIndexOf(':');
         const srcHost = srcLast > 0 ? srcRaw.slice(0, srcLast) : srcRaw;
         const resolved = hostToNodeId[srcRaw] || hostToNodeId[srcHost]
@@ -2045,7 +2070,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
 
       // Dedup on the real probe target, not on the destination label: a group
       // label shared by several probes would otherwise keep only the first one.
-      const probeTarget = bbInstanceOf(inst) || targetRaw;
+      const probeTarget = bbTargetOf(inst) || targetRaw;
       const seenKey = `${srcId}:::${targetRaw}:::${probeTarget}`;
       if (seen.has(seenKey)) return;
       seen.add(seenKey);
@@ -2197,6 +2222,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       _bbProbes: allProbes,
       _blackboxUp: allUp,
       _bbInstance: targetsAB[0] || targetsBA[0],
+      _bbInstLabel: bbTargetLabel,
       color: { color: edgeColor, highlight: edgeColor, hover: edgeColor },
       smooth: { type: 'curvedCCW', roundness: 0.3 },
       arrows,
@@ -3060,7 +3086,8 @@ function renderVisNetwork(nodes, edges, zones = [], zoneMembers = {}) {
 
       // Lien blackbox (ICMP / SSH banner)
       if (edge._bbProbes) {
-        const q = `probe_success{instance="${edge._bbInstance}"}`;
+        // The target is not always held by `instance`: query the label it was read from
+        const q = `probe_success{${edge._bbInstLabel || 'instance'}="${edge._bbInstance}"}`;
         window.open(`${base}/graph?g0.expr=${encodeURIComponent(q)}&g0.tab=1`, '_blank');
         return;
       }
