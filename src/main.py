@@ -520,7 +520,9 @@ class _NodePos(BaseModel):
             raise ValueError('must be a finite number')
         return v
 
-class _LayoutData(RootModel[dict[str, Union[_NodePos, bool, float]]]):
+# Values are either a node position, a UI flag, or a map of per-kind UI flags
+# (e.g. __guestHidden).
+class _LayoutData(RootModel[dict[str, Union[_NodePos, bool, float, dict[str, bool]]]]):
     pass
 
 

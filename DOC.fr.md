@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.22.1**
+Version : **0.22.2**
 
 ---
 
