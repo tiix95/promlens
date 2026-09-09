@@ -146,9 +146,10 @@ blackbox:                                 # supprimer la section ou mettre enabl
   #   http: [http_2xx, https_2xx]         # tooltip du noeud (defaut: http_2xx, https_2xx)
   #   # une chaine seule est acceptee, une liste vide desactive le role
   dest_aliases:                           # alias -> nom de noeud pour les cibles non resolvables
-    mynode:
-      - alias-1
-      - alias-2
+    mynode:                               # prioritaire sur toute autre resolution de nom
+      - alias-1                           # alias exact : la sonde est rattachee a mynode
+      - alias-2                           # alias prefixe : "alias-2-server" resout le noeud "server"
+                                          # un mynode inconnu est signale dans le panneau des warnings
 
 frigate:                                  # supprimer la section ou mettre enabled: false pour desactiver
   enabled: true

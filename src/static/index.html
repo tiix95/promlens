@@ -1226,9 +1226,12 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const inst = mergedTopoToInstance[targetHost];
       if (inst) addIfMissing(inst);
     };
-    // Alias-prefix strip: "l1-server" -> alias "l1" -> remainder "server" -> fuzzy -> "server-l1"
+    // Exact alias: key "alias-1" -> dest_aliases target "server"
     let resolved = false;
-    for (const alias of Object.keys(bbDestAliases)) {
+    const exactAlias = bbDestAliases[raw] || bbDestAliases[rawHost];
+    if (exactAlias && hostToNodeId[exactAlias]) { resolveTarget(exactAlias); resolved = true; }
+    // Alias-prefix strip: "l1-server" -> alias "l1" -> remainder "server" -> fuzzy -> "server-l1"
+    if (!resolved) for (const alias of Object.keys(bbDestAliases)) {
       if (rawHost.length > alias.length && rawHost.startsWith(alias) && '-_.'.includes(rawHost[alias.length])) {
         const rem = rawHost.slice(alias.length + 1);
         if (hostToNodeId[rem]) { resolveTarget(rem); resolved = true; break; }
@@ -1822,6 +1825,9 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     const last = raw.lastIndexOf(':');
     const host = last > 0 ? raw.slice(0, last) : raw;
     if (hostToNodeId[raw] || hostToNodeId[host]) return; // already in graph
+    // Exact alias: dest "alias-1" -> dest_aliases target "server" -> that node carries the probe
+    const exactAlias = bbDestAliases[raw] || bbDestAliases[host];
+    if (exactAlias && hostToNodeId[exactAlias]) return;
     // Alias-prefix strip: "l1-server" -> alias "l1" -> remainder "server" -> node "server-l1" starts with "server"
     if (Object.keys(bbDestAliases).some(alias => {
       if (host.length <= alias.length || !host.startsWith(alias) || !'-_.'.includes(host[alias.length])) return false;
@@ -2047,6 +2053,12 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
   const promNodeId = bbPromNode ? (hostToNodeId[bbPromNode] || fuzzyNodeResolve(bbPromNode)) : null;
   if (bbPromNode && !promNodeId) warnings.push(`blackbox.prometheus_node not resolved: "${bbPromNode}"`);
 
+  // An alias pointing at an unknown node silently does nothing: say so.
+  new Set(Object.values(bbDestAliases)).forEach(target => {
+    if (!hostToNodeId[target] && !fuzzyNodeResolve(target))
+      warnings.push(`blackbox.dest_aliases target not resolved: "${target}"`);
+  });
+
   // Grouping by unordered pair: (A,B) and (B,A) -> same key
   // Structure : { nodeA, nodeB, probesAB[], probesBA[], targetsAB[], targetsBA[] }
   const bbByKey = {};
@@ -2077,9 +2089,10 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
 
       const lastCol    = targetRaw.lastIndexOf(':');
       const targetHost = lastCol > 0 ? targetRaw.slice(0, lastCol) : targetRaw;
+      // dest_aliases is an explicit mapping: it wins over any name lookup.
       const aliasNode  = bbDestAliases[targetRaw] || bbDestAliases[targetHost];
-      const destId     = hostToNodeId[targetRaw] || hostToNodeId[targetHost]
-                      || (aliasNode ? hostToNodeId[aliasNode] : null)
+      const destId     = (aliasNode ? (hostToNodeId[aliasNode] || fuzzyNodeResolve(aliasNode)) : null)
+                      || hostToNodeId[targetRaw] || hostToNodeId[targetHost]
                       || fuzzyNodeResolve(targetRaw) || fuzzyNodeResolve(targetHost);
       if (!destId) return;
       // A node probing itself (Prometheus probing its own host) would draw a

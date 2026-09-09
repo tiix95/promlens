@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.22.2**
+Version: **0.22.3**
 
 ---
 
@@ -203,7 +203,7 @@ blackbox:
 | `prometheus_node` | string | none | Node hosting Prometheus. Probes whose source is unknown start from this node instead of the standalone `prometheus` node. Accepts a topology node ID, an IP, a label or a Prometheus instance/hostname |
 | `http_node_label` | string | `upstream` | Label identifying the node for HTTP/HTTPS probes. A series missing this label falls back to `upstream`, then to `parent_label`; a series carrying none of them is skipped |
 | `modules` | map | see below | Blackbox module names queried for each role |
-| `dest_aliases` | map | `{}` | Maps topology node IDs to lists of probe target aliases |
+| `dest_aliases` | map | `{}` | Maps topology node IDs to lists of probe target aliases. Explicit mapping: it wins over any other name resolution (exact or fuzzy) for a probe destination. See below |
 
 #### blackbox.modules
 
@@ -233,6 +233,23 @@ blackbox:
 ```
 
 The resolved map (config merged with the defaults) is returned by `GET /api/config` as `blackbox.modules`.
+
+#### blackbox.dest_aliases
+
+Attaches probes whose target name matches no node of the graph. Two forms are handled, both with the config `dest_aliases: {mynode: [alias-one, alias-two]}`:
+
+| Probe target | Form | Result |
+|---|---|---|
+| `alias-one` | Exact alias | The probe attaches to `mynode` |
+| `alias-one-server` | Alias prefix | `alias-one` is stripped, the remainder `server` is resolved as a node name (exact, then fuzzy) |
+
+The mapping is explicit, so it takes priority over any other name resolution (exact or fuzzy) when choosing the destination of a probe. An aliased target no longer creates an orphan probe-only node: the probe edge lands on the target node.
+
+A mapping key naming no node of the graph is ignored, and the warnings panel shows:
+
+```
+blackbox.dest_aliases target not resolved: "mynode"
+```
 
 #### Grouping several probes on one node
 

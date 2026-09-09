@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.22.2**
+Version : **0.22.3**
 
 ---
 
@@ -203,7 +203,7 @@ blackbox:
 | `prometheus_node` | string | aucun | Noeud qui héberge Prometheus. Les sondes dont la source est inconnue partent de ce noeud au lieu du noeud `prometheus` autonome. Accepte un ID de noeud de topologie, une IP, un label ou une instance/hostname Prometheus |
 | `http_node_label` | string | `upstream` | Label identifiant le noeud pour les sondes HTTP/HTTPS. Une serie sans ce label retombe sur `upstream`, puis sur `parent_label` ; une serie qui n'a aucun des trois est ignoree |
 | `modules` | map | voir ci-dessous | Noms des modules blackbox interrogés pour chaque rôle |
-| `dest_aliases` | map | `{}` | Associe des ID de noeuds de topologie à des listes d'alias de cibles de sonde |
+| `dest_aliases` | map | `{}` | Associe des ID de noeuds de topologie à des listes d'alias de cibles de sonde. Mapping explicite : il est prioritaire sur toute autre résolution de nom (exacte ou fuzzy) pour la destination d'une sonde. Voir ci-dessous |
 
 #### blackbox.modules
 
@@ -233,6 +233,23 @@ blackbox:
 ```
 
 La map résolue (config fusionnée avec les défauts) est renvoyée par `GET /api/config` dans `blackbox.modules`.
+
+#### blackbox.dest_aliases
+
+Rattache les sondes dont le nom de cible ne correspond à aucun noeud du graphe. Deux formes sont gérées, toutes deux avec la config `dest_aliases: {mynode: [alias-one, alias-two]}` :
+
+| Cible de sonde | Forme | Résultat |
+|---|---|---|
+| `alias-one` | Alias exact | La sonde est rattachée à `mynode` |
+| `alias-one-server` | Alias en préfixe | `alias-one` est retiré, le reste `server` est résolu comme un nom de noeud (exact, puis fuzzy) |
+
+Le mapping est explicite : il est prioritaire sur toute autre résolution de nom (exacte ou fuzzy) pour le choix de la destination d'une sonde. Une cible aliasée ne crée plus de noeud sonde orphelin : l'arête de sonde arrive sur le noeud cible.
+
+Une clé de mapping qui ne désigne aucun noeud du graphe est ignorée, et le panneau des warnings affiche :
+
+```
+blackbox.dest_aliases target not resolved: "mynode"
+```
 
 #### Grouper plusieurs sondes sur un noeud
 

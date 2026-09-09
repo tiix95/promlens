@@ -145,9 +145,10 @@ blackbox:                                 # remove section or set enabled: false
   #   http: [http_2xx, https_2xx]         # node tooltip (default: http_2xx, https_2xx)
   #   # a single string is accepted; an empty list disables the role
   dest_aliases:                           # alias -> node name for unresolvable probe targets
-    mynode:
-      - alias-1
-      - alias-2
+    mynode:                               # wins over any other name resolution for a probe
+      - alias-1                           # exact alias: the probe attaches to mynode
+      - alias-2                           # prefix alias: "alias-2-server" resolves to node "server"
+                                          # an unknown mynode is reported in the warnings panel
 
 frigate:                                  # remove section or set enabled: false to disable
   enabled: true
