@@ -1027,6 +1027,16 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     [...mergedTopoIds].map(id => [id, promHostToSrvId[id].slice(7)])
   );
 
+  // Icon config of a topology node. `type` is required; a node missing it, or
+  // carrying a type this build does not know, still has to be drawn: a node
+  // matching a Prometheus host reads as a server, the others as a switch.
+  const topoTypeCfg = n => TYPE_CFG[n?.type]
+    || (n && mergedTopoIds.has(n.id) ? TYPE_CFG.server : TYPE_CFG.switch);
+  topoNodes.forEach(n => {
+    if (!TYPE_CFG[n.type])
+      warnings.push(`topology node "${n.id}": ${n.type ? `unknown type "${n.type}"` : 'missing type'}`);
+  });
+
   // -- Blackbox pre-scan: cross interfaces to exclude from normal tooltips --
   // Computed before Phase 2 (uses promHostToSrvId, already available).
   // Principle: a host2->host1 probe implies a "host2" iface on host1 (and "host1" on host2).
@@ -1124,7 +1134,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
 
   topoNodes.forEach(n => {
     const label = n.label ?? n.id;
-    const tc = TYPE_CFG[n.type] || TYPE_CFG.switch;
+    const tc = topoTypeCfg(n);
     // ICMP/SSH probe status (may be overwritten by Phase 5 for merged nodes)
     const topoKeys  = [n.id, n.label, n.ip].filter(Boolean);
     const topoProbeFailing = topoKeys.some(k => bbProbeFailing(k, k));
@@ -1281,7 +1291,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     const tcpStr  = topoKeys.map(k => tcpTip(k, k)).find(Boolean) ?? null;
     const httpStr = topoKeys.map(k => httpTip(k, k)).find(Boolean) ?? null;
     if (!bbStr && !tcpStr && !httpStr) return;
-    const tc = TYPE_CFG[n.type] || TYPE_CFG.switch;
+    const tc = topoTypeCfg(n);
     const label = n.label ?? n.id;
     const failing = topoKeys.some(k => bbProbeFailing(k, k) || tcpFailing(k, k) || httpFailing(k, k));
     const color = failing ? '#e0972a' : tc.color;
@@ -1499,7 +1509,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const topoNode = nodes.find(nd => nd.id === topoId);
       if (topoNode) {
         const topoN    = topoNodes.find(n => n.id === topoId);
-        const tc       = TYPE_CFG[topoN?.type] || TYPE_CFG.switch;
+        const tc       = topoTypeCfg(topoN);
         const row = (label, val) => `<span style="color:#7e8aaa">${label}</span> ${val}`;
         const pct = (ratio, metric = 'cpu', digits = 1) => ratio != null
           ? `<b style="color:${
@@ -1748,7 +1758,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       if (alreadyLinked) return;
 
       const topoN    = topoNodes.find(n => n.id === memberId);
-      const tc       = TYPE_CFG[topoN?.type] || TYPE_CFG.switch;
+      const tc       = topoTypeCfg(topoN);
       const instance = mergedTopoToInstance[memberId]; // set only if the Prometheus node was merged
       let edgeColor  = '#2a3354';
       let isUp       = false;

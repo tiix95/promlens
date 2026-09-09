@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.22.5**
+Version : **0.22.6**
 
 ---
 
@@ -573,12 +573,23 @@ nodes:
 |---|---|---|
 | `id` | oui | Identifiant unique. Peut correspondre à un nom d'hôte Prometheus |
 | `label` | non | Nom affiché (défaut : `id`) |
-| `type` | oui | `cloud`, `router`, `firewall`, `switch`, `server`, `vm`, `lxc`, `kube`, `zigbee`, `wifi` |
+| `type` | oui | `cloud`, `router`, `firewall`, `switch`, `server`, `vm`, `lxc`, `kube`, `zigbee`, `wifi`. Absent ou inconnu : icône de repli et avertissement (voir ci-dessous) |
 | `parent` | non | ID du noeud parent (crée un lien) |
 | `children` | non | Liste de noeuds enfants — équivalent à définir `parent` sur chaque enfant |
 | `interface` | non | Interface à afficher dans l'infobulle du lien vers le parent |
 | `ip` | non | Adresse IP utilisée pour la résolution du noeud |
 | `inherit_zone` | non | Mettre `false` pour exclure ce noeud de l'héritage automatique de zone (défaut : `true`) |
+
+**Type absent ou inconnu :**
+
+`type` reste obligatoire, mais un noeud qui en est dépourvu — ou qui porte un type inconnu de cette version — est quand même dessiné avec une icône de repli : `server` si l'`id` du noeud correspond à un hôte Prometheus (noeud fusionné), `switch` sinon. Ce repli est signalé dans le panneau des avertissements :
+
+```
+topology node "mynode": missing type
+topology node "mynode": unknown type "nas"
+```
+
+Auparavant le repli était silencieux et affichait toujours l'icône switch, ce qui pouvait laisser croire qu'un serveur monitoré était un switch.
 
 **Couleurs par type de noeud :**
 

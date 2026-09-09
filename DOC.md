@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.22.5**
+Version: **0.22.6**
 
 ---
 
@@ -573,12 +573,23 @@ nodes:
 |---|---|---|
 | `id` | yes | Unique identifier. Can match a Prometheus hostname |
 | `label` | no | Display name (default: `id`) |
-| `type` | yes | `cloud`, `router`, `firewall`, `switch`, `server`, `vm`, `lxc`, `kube`, `zigbee`, `wifi` |
+| `type` | yes | `cloud`, `router`, `firewall`, `switch`, `server`, `vm`, `lxc`, `kube`, `zigbee`, `wifi`. Missing or unknown: fallback icon and a warning (see below) |
 | `parent` | no | ID of the parent node (creates a link) |
 | `children` | no | List of child nodes — equivalent to setting `parent` on each child |
 | `interface` | no | Interface to show in the link tooltip toward the parent |
 | `ip` | no | IP address used for node resolution |
 | `inherit_zone` | no | Set `false` to exclude this node from automatic zone inheritance (default: `true`) |
+
+**Missing or unknown type:**
+
+`type` stays required, but a node without it — or carrying a type this build does not know — is still drawn with a fallback icon: `server` if the node `id` matches a Prometheus host (merged node), `switch` otherwise. The fallback is reported in the warnings panel:
+
+```
+topology node "mynode": missing type
+topology node "mynode": unknown type "nas"
+```
+
+Previously the fallback was silent and always used the switch icon, which could make a monitored server look like a switch.
 
 **Node type colors:**
 
