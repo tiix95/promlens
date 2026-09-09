@@ -773,11 +773,20 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     }
     return false;
   })();
-  const bbTargetOf = inst => bbDestIsGroup
+  // An aliased destination is a name the operator wrote down: it identifies the
+  // probe better than the group target, and it is what tells apart several
+  // probes landing on the same node. The edge still goes to the aliased node.
+  const bbAliasName = inst => {
+    const dest = bbDestKey(inst);
+    const host = dest.lastIndexOf(':') > 0 ? dest.slice(0, dest.lastIndexOf(':')) : dest;
+    return (bbDestAliases[dest] || bbDestAliases[host]) ? dest : '';
+  };
+  const bbTargetOf = inst => bbAliasName(inst) || (bbDestIsGroup
     ? (bbInstanceOf(inst) || bbDestKey(inst))
-    : (bbDestKey(inst)    || bbInstanceOf(inst));
+    : (bbDestKey(inst)    || bbInstanceOf(inst)));
   // Label carrying that target, used to build the Prometheus query on edge click
-  const bbTargetLabel = bbDestIsGroup ? (instLabel || 'instance') : bbDestLabel;
+  const bbTargetLabel   = bbDestIsGroup ? (instLabel || 'instance') : bbDestLabel;
+  const bbTargetLabelOf = inst => bbAliasName(inst) ? bbDestLabel : bbTargetLabel;
 
   // -- TCP connect index : host -> [{ service, port, tool, probeSuccess }]
   const tcpByHost = {};
@@ -1218,13 +1227,22 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
   // e.g. key "l1-server" -> also index under "server-l1" and "server-l1:9100"
   Object.entries({ ...bbDestByHost }).forEach(([raw, probes]) => {
     const rawHost = raw.lastIndexOf(':') > 0 ? raw.slice(0, raw.lastIndexOf(':')) : raw;
-    const addIfMissing = (key) => { if (key && !bbDestByHost[key]) bbDestByHost[key] = probes; };
+    // Merge, never overwrite: several probe keys (several aliases) can resolve
+    // to the same node, and its tooltip must list them all.
+    const mergeInto = (key) => {
+      if (!key) return;
+      if (!bbDestByHost[key]) { bbDestByHost[key] = [...probes]; return; }
+      probes.forEach(p => {
+        if (!bbDestByHost[key].some(q => q.module === p.module && q.src === p.src && q.target === p.target))
+          bbDestByHost[key].push(p);
+      });
+    };
     const resolveTarget = (targetHost) => {
-      addIfMissing(targetHost);
+      mergeInto(targetHost);
       const nodeRef = hostToNodeId[targetHost];
-      if (nodeRef?.startsWith('__srv__')) addIfMissing(nodeRef.slice(7));
+      if (nodeRef?.startsWith('__srv__')) mergeInto(nodeRef.slice(7));
       const inst = mergedTopoToInstance[targetHost];
-      if (inst) addIfMissing(inst);
+      if (inst) mergeInto(inst);
     };
     // Exact alias: key "alias-1" -> dest_aliases target "server"
     let resolved = false;
@@ -2080,10 +2098,11 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
         if (resolved) srcId = resolved;
       }
 
-      // Dedup on the real probe target, not on the destination label: a group
-      // label shared by several probes would otherwise keep only the first one.
+      // Dedup on the probed series, not on the destination label: a group label
+      // shared by several probes, or an alias naming them all alike, would
+      // otherwise keep only the first one. Identical rows are dropped below.
       const probeTarget = bbTargetOf(inst) || targetRaw;
-      const seenKey = `${srcId}:::${targetRaw}:::${probeTarget}`;
+      const seenKey = `${srcId}:::${targetRaw}:::${probeTarget}:::${bbInstanceOf(inst)}`;
       if (seen.has(seenKey)) return;
       seen.add(seenKey);
 
@@ -2108,13 +2127,19 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
         nodeA: idA, nodeB: idB,
         probesAB: [], probesBA: [],
         targetsAB: [], targetsBA: [],
+        targetLabels: {},
       };
       const e = bbByKey[groupKey];
       const probeList  = fromA ? e.probesAB  : e.probesBA;
       const targetList = fromA ? e.targetsAB : e.targetsBA;
       if (!targetList.includes(probeTarget)) targetList.push(probeTarget);
+      // An aliased target is read from destination_label, the others from the
+      // global target label: the edge click must query the right one.
+      e.targetLabels[probeTarget] = bbTargetLabelOf(inst);
       // module = actual probe name (display), role = configured role (filters)
-      probeList.push({ module: inst.labels.module || role, role, probeUp: parseFloat(inst.value) === 1, target: probeTarget });
+      const probe = { module: inst.labels.module || role, role, probeUp: parseFloat(inst.value) === 1, target: probeTarget };
+      if (!probeList.some(p => p.module === probe.module && p.target === probe.target && p.probeUp === probe.probeUp))
+        probeList.push(probe);
     });
   };
 
@@ -2157,7 +2182,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
            `<span style="color:#7e8aaa">↑</span> ${formatBytesPerSec(data.tx)}`;
   };
 
-  Object.entries(bbByKey).forEach(([key, { nodeA, nodeB, probesAB, probesBA, targetsAB, targetsBA }]) => {
+  Object.entries(bbByKey).forEach(([key, { nodeA, nodeB, probesAB, probesBA, targetsAB, targetsBA, targetLabels }]) => {
     const allProbes  = [...probesAB, ...probesBA];
     const allUp      = allProbes.every(p => p.probeUp);
     const bidir      = probesAB.length > 0 && probesBA.length > 0;
@@ -2165,7 +2190,11 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     const nameA      = esc(bbNodeName(nodeA));
     const nameB      = esc(bbNodeName(nodeB));
     if (!allUp) {
-      const failMods = [...new Set(allProbes.filter(p => !p.probeUp).map(p => p.module))];
+      // Name the target too when the edge carries several: the node name alone
+      // would not say which probe is down.
+      const allTargets = new Set(allProbes.map(p => p.target).filter(Boolean));
+      const failMods = [...new Set(allProbes.filter(p => !p.probeUp).map(p =>
+        allTargets.size > 1 && p.target ? `${p.module} ${p.target}` : p.module))];
       issues.push({ label: `${bbNodeName(nodeA)} ↔ ${bbNodeName(nodeB)}`, severity: 'red', reason: `probe ${failMods.join('+')} down` });
     }
 
@@ -2235,7 +2264,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       _bbProbes: allProbes,
       _blackboxUp: allUp,
       _bbInstance: targetsAB[0] || targetsBA[0],
-      _bbInstLabel: bbTargetLabel,
+      _bbInstLabel: targetLabels[targetsAB[0] || targetsBA[0]] || bbTargetLabel,
       color: { color: edgeColor, highlight: edgeColor, hover: edgeColor },
       smooth: { type: 'curvedCCW', roundness: 0.3 },
       arrows,

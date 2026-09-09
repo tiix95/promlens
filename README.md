@@ -148,6 +148,7 @@ blackbox:                                 # remove section or set enabled: false
     mynode:                               # wins over any other name resolution for a probe
       - alias-1                           # exact alias: the probe attaches to mynode
       - alias-2                           # prefix alias: "alias-2-server" resolves to node "server"
+                                          # tooltips name the probe by the alias, not by mynode
                                           # an unknown mynode is reported in the warnings panel
 
 frigate:                                  # remove section or set enabled: false to disable

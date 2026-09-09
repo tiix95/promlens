@@ -149,6 +149,7 @@ blackbox:                                 # supprimer la section ou mettre enabl
     mynode:                               # prioritaire sur toute autre resolution de nom
       - alias-1                           # alias exact : la sonde est rattachee a mynode
       - alias-2                           # alias prefixe : "alias-2-server" resout le noeud "server"
+                                          # les tooltips nomment la sonde par l'alias, pas par mynode
                                           # un mynode inconnu est signale dans le panneau des warnings
 
 frigate:                                  # supprimer la section ou mettre enabled: false pour desactiver

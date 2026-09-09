@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.22.3**
+Version : **0.22.4**
 
 ---
 
@@ -244,6 +244,8 @@ Rattache les sondes dont le nom de cible ne correspond à aucun noeud du graphe.
 | `alias-one-server` | Alias en préfixe | `alias-one` est retiré, le reste `server` est résolu comme un nom de noeud (exact, puis fuzzy) |
 
 Le mapping est explicite : il est prioritaire sur toute autre résolution de nom (exacte ou fuzzy) pour le choix de la destination d'une sonde. Une cible aliasée ne crée plus de noeud sonde orphelin : l'arête de sonde arrive sur le noeud cible.
+
+Les tooltips (noeud et arête) et le panneau des issues nomment la sonde par la valeur de son `destination_label`, c'est-à-dire l'alias tel qu'il est écrit dans la config (`alias-one`), et non par le noeud cible résolu (`mynode`). L'arête, elle, continue de pointer vers le noeud réel : `alias-one` et `alias-two` partagent une seule arête vers `mynode` tout en gardant une ligne chacun dans les tooltips. Ce nommage par alias est prioritaire même quand `destination_label` est détecté comme un label de groupe, et le clic sur l'arête ouvre la requête Prometheus avec le bon label : `destination_label` pour une cible aliasée.
 
 Une clé de mapping qui ne désigne aucun noeud du graphe est ignorée, et le panneau des warnings affiche :
 

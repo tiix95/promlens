@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.22.3**
+Version: **0.22.4**
 
 ---
 
@@ -244,6 +244,8 @@ Attaches probes whose target name matches no node of the graph. Two forms are ha
 | `alias-one-server` | Alias prefix | `alias-one` is stripped, the remainder `server` is resolved as a node name (exact, then fuzzy) |
 
 The mapping is explicit, so it takes priority over any other name resolution (exact or fuzzy) when choosing the destination of a probe. An aliased target no longer creates an orphan probe-only node: the probe edge lands on the target node.
+
+Tooltips (node and edge) and the issues panel name the probe by its `destination_label` value, that is the alias as written in the config (`alias-one`), not the resolved target node (`mynode`). The edge itself still points at the real node, so `alias-one` and `alias-two` share a single edge to `mynode` while keeping one line each in the tooltips. This alias naming wins even when `destination_label` is detected as a group label, and clicking the edge opens the Prometheus query with the matching label: `destination_label` for an aliased target.
 
 A mapping key naming no node of the graph is ignored, and the warnings panel shows:
 
