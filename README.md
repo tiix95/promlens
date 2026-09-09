@@ -150,6 +150,11 @@ blackbox:                                 # remove section or set enabled: false
       - alias-2                           # prefix alias: "alias-2-server" resolves to node "server"
                                           # tooltips name the probe by the alias, not by mynode
                                           # an unknown mynode is reported in the warnings panel
+  source_aliases:                         # same, for the source_label values
+    mynode:                               # wins over any other name resolution for a probe
+      - alias-3                           # the probe starts from mynode instead of prometheus_node
+      - alias-4                           # tooltips name the source by the alias, not by mynode
+                                          # an unknown mynode is reported in the warnings panel
 
 frigate:                                  # remove section or set enabled: false to disable
   enabled: true

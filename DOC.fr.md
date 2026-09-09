@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.22.6**
+Version : **0.23.0**
 
 ---
 
@@ -191,7 +191,11 @@ blackbox:
     http: [http_2xx, https_2xx]  # defaut
   dest_aliases:
     mynode:                      # ID de noeud de topologie
-      - alias-one                # valeurs de label Prometheus associees a mynode
+      - alias-one                # valeurs de destination_label associees a mynode
+      - alias-two
+  source_aliases:
+    mynode:                      # ID de noeud de topologie
+      - alias-one                # valeurs de source_label associees a mynode
       - alias-two
 ```
 
@@ -204,6 +208,7 @@ blackbox:
 | `http_node_label` | string | `upstream` | Label identifiant le noeud pour les sondes HTTP/HTTPS. Une serie sans ce label retombe sur `upstream`, puis sur `parent_label` ; une serie qui n'a aucun des trois est ignoree |
 | `modules` | map | voir ci-dessous | Noms des modules blackbox interrogés pour chaque rôle |
 | `dest_aliases` | map | `{}` | Associe des ID de noeuds de topologie à des listes d'alias de cibles de sonde. Mapping explicite : il est prioritaire sur toute autre résolution de nom (exacte ou fuzzy) pour la destination d'une sonde. Voir ci-dessous |
+| `source_aliases` | map | `{}` | Associe des ID de noeuds de topologie à des listes d'alias de sources de sonde. Mapping explicite : il est prioritaire sur toute autre résolution de nom (exacte ou fuzzy) pour la source d'une sonde. Voir ci-dessous |
 
 #### blackbox.modules
 
@@ -252,6 +257,24 @@ Une clé de mapping qui ne désigne aucun noeud du graphe est ignorée, et le pa
 ```
 blackbox.dest_aliases target not resolved: "mynode"
 ```
+
+#### blackbox.source_aliases
+
+Le pendant de `dest_aliases` pour le `source_label`. Même format : la clé est un ID de noeud de topologie, la valeur est la liste des valeurs de `source_label` qui désignent ce noeud.
+
+Une valeur de `source_label` ne correspondant à aucun noeud faisait repartir la sonde du noeud Prometheus par défaut (`prometheus_node`, ou le noeud `prometheus` autonome). Avec `source_aliases: {mynode: [alias-one, alias-two]}`, une sonde dont la source est `alias-one` part de `mynode`.
+
+Le mapping est explicite : il est prioritaire sur toute autre résolution de nom (exacte ou fuzzy) pour le choix de la source d'une sonde.
+
+Les tooltips nomment la source par la valeur de son `source_label`, c'est-à-dire l'alias tel qu'il est écrit dans la config (`alias-one`), et non par le noeud source résolu (`mynode`). Plusieurs alias sources partageant un noeud restent donc distinguables : le tooltip d'arête affiche une ligne `sources:` quand il y en a plusieurs, et chaque ligne de sonde est suffixée par `(alias -> cible)`.
+
+Une clé de mapping qui ne désigne aucun noeud du graphe est ignorée, et le panneau des warnings affiche :
+
+```
+blackbox.source_aliases target not resolved: "mynode"
+```
+
+Contrairement aux destinations, une source non résolue n'a jamais créé de noeud orphelin : elle retombait simplement sur le noeud Prometheus.
 
 #### Grouper plusieurs sondes sur un noeud
 

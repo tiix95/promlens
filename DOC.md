@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.22.6**
+Version: **0.23.0**
 
 ---
 
@@ -191,7 +191,11 @@ blackbox:
     http: [http_2xx, https_2xx]  # default
   dest_aliases:
     mynode:                      # topology node ID
-      - alias-one                # Prometheus label values that map to mynode
+      - alias-one                # destination_label values that map to mynode
+      - alias-two
+  source_aliases:
+    mynode:                      # topology node ID
+      - alias-one                # source_label values that map to mynode
       - alias-two
 ```
 
@@ -204,6 +208,7 @@ blackbox:
 | `http_node_label` | string | `upstream` | Label identifying the node for HTTP/HTTPS probes. A series missing this label falls back to `upstream`, then to `parent_label`; a series carrying none of them is skipped |
 | `modules` | map | see below | Blackbox module names queried for each role |
 | `dest_aliases` | map | `{}` | Maps topology node IDs to lists of probe target aliases. Explicit mapping: it wins over any other name resolution (exact or fuzzy) for a probe destination. See below |
+| `source_aliases` | map | `{}` | Maps topology node IDs to lists of probe source aliases. Explicit mapping: it wins over any other name resolution (exact or fuzzy) for a probe source. See below |
 
 #### blackbox.modules
 
@@ -252,6 +257,24 @@ A mapping key naming no node of the graph is ignored, and the warnings panel sho
 ```
 blackbox.dest_aliases target not resolved: "mynode"
 ```
+
+#### blackbox.source_aliases
+
+The `source_label` counterpart of `dest_aliases`. Same format: the key is a topology node ID, the value is the list of `source_label` values naming that node.
+
+A `source_label` value matching no node made the probe start from the default Prometheus node (`prometheus_node`, or the standalone `prometheus` node). With `source_aliases: {mynode: [alias-one, alias-two]}`, a probe whose source is `alias-one` starts from `mynode`.
+
+The mapping is explicit, so it takes priority over any other name resolution (exact or fuzzy) when choosing the source of a probe.
+
+Tooltips name the source by its `source_label` value, that is the alias as written in the config (`alias-one`), not the resolved source node (`mynode`). Several source aliases sharing one node therefore stay distinguishable: the edge tooltip shows a `sources:` line when there are several, and each probe line is suffixed with `(alias -> target)`.
+
+A mapping key naming no node of the graph is ignored, and the warnings panel shows:
+
+```
+blackbox.source_aliases target not resolved: "mynode"
+```
+
+Unlike destinations, an unresolved source never created an orphan node: it simply fell back to the Prometheus node.
 
 #### Grouping several probes on one node
 

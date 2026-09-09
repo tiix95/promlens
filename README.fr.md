@@ -151,6 +151,11 @@ blackbox:                                 # supprimer la section ou mettre enabl
       - alias-2                           # alias prefixe : "alias-2-server" resout le noeud "server"
                                           # les tooltips nomment la sonde par l'alias, pas par mynode
                                           # un mynode inconnu est signale dans le panneau des warnings
+  source_aliases:                         # idem, pour les valeurs de source_label
+    mynode:                               # prioritaire sur toute autre resolution de nom
+      - alias-3                           # la sonde part de mynode au lieu de prometheus_node
+      - alias-4                           # les tooltips nomment la source par l'alias, pas par mynode
+                                          # un mynode inconnu est signale dans le panneau des warnings
 
 frigate:                                  # supprimer la section ou mettre enabled: false pour desactiver
   enabled: true

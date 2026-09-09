@@ -459,6 +459,7 @@ let directCredentials = false;
 let bbDestLabel    = 'instance';
 let bbSrcLabel     = null;
 let bbDestAliases  = {}; // alias -> node name (from the dest_aliases config)
+let bbSrcAliases   = {}; // alias -> node name (from the source_aliases config)
 let bbPromNode     = null; // node hosting Prometheus (prometheus_node): default probe source
 // Blackbox module names queried per role -- overridden by blackbox.modules
 let bbModules = { icmp: ['icmp'], ssh: ['ssh_banner'], tcp: ['tcp_connect'], http: ['http_2xx', 'https_2xx'] };
@@ -875,6 +876,9 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
   const bbDestByHost = {};
   const bbSrcByHost  = {}; // src -> [{ module, probeSuccess, destHost, target }] -- only when source_label configured
   const bbDestRawKeys = new Set();
+  // Two probes are the same row when they say the same thing about the same pair.
+  const sameDestProbe = (a, b) => a.module === b.module && a.src === b.src && a.target === b.target;
+  const sameOutProbe  = (a, b) => a.module === b.module && a.destHost === b.destHost && a.target === b.target && a.srcName === b.srcName;
   [...(blackboxData?.instances || []), ...(blackboxSshData?.instances || [])].forEach(inst => {
     const raw  = bbDestKey(inst);
     const last = raw.lastIndexOf(':');
@@ -890,18 +894,18 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     };
     [raw, host].filter(Boolean).forEach(k => {
       if (!bbDestByHost[k]) bbDestByHost[k] = [];
-      if (!bbDestByHost[k].some(p => p.module === probe.module && p.src === probe.src && p.target === probe.target))
-        bbDestByHost[k].push(probe);
+      if (!bbDestByHost[k].some(p => sameDestProbe(p, probe))) bbDestByHost[k].push(probe);
     });
     // Index by source so outgoing probes can be shown in the source node's tooltip.
     // A probe with no source label starts from the configured prometheus_node.
     const outKeys = (srcRaw ? [srcRaw, srcHost] : [bbPromNode]).filter(Boolean);
     if (outKeys.length) {
-      const outProbe = { module: probe.module, probeSuccess: probe.probeSuccess, destHost: host || raw, target: probe.target };
+      // srcName keeps the source_label value, the name an alias was written
+      // under: it tells apart several aliases sharing one node.
+      const outProbe = { module: probe.module, probeSuccess: probe.probeSuccess, destHost: host || raw, target: probe.target, srcName: srcRaw || bbPromNode };
       outKeys.forEach(k => {
         if (!bbSrcByHost[k]) bbSrcByHost[k] = [];
-        if (!bbSrcByHost[k].some(p => p.module === outProbe.module && p.destHost === outProbe.destHost && p.target === outProbe.target))
-          bbSrcByHost[k].push(outProbe);
+        if (!bbSrcByHost[k].some(p => sameOutProbe(p, outProbe))) bbSrcByHost[k].push(outProbe);
       });
     }
   });
@@ -939,6 +943,15 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     if (!bbSrcLabel) return [];
     if (bbSrcByHost[instance]?.length) return bbSrcByHost[instance];
     if (bbSrcByHost[host]?.length)     return bbSrcByHost[host];
+    // Exact alias: src "l1" -> bbSrcAliases["l1"] = "server2" -> matches host "server2"
+    const aliased = [];
+    for (const [k, probes] of Object.entries(bbSrcByHost)) {
+      const kh = k.lastIndexOf(':') > 0 ? k.slice(0, k.lastIndexOf(':')) : k;
+      const aliasTarget = bbSrcAliases[k] || bbSrcAliases[kh];
+      if (aliasTarget && (aliasTarget === host || instance.startsWith(aliasTarget + ':')))
+        probes.forEach(p => { if (!aliased.some(q => sameOutProbe(q, p))) aliased.push(p); });
+    }
+    if (aliased.length) return aliased;
     for (const [k, probes] of Object.entries(bbSrcByHost)) {
       const kh = k.lastIndexOf(':') > 0 ? k.slice(0, k.lastIndexOf(':')) : k;
       if (kh.length > 0 && host.startsWith(kh) && '-_.'.includes(host[kh.length])) return probes;
@@ -973,11 +986,13 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       // When source_label is configured, each probe appears in the SOURCE node's tooltip only.
       const outgoing = findBbOutgoingProbes(instance, host);
       if (!outgoing.length) return null;
-      const self = bbShortHost(host || instance);
       const rows = outgoing.map(p => {
         const c     = p.probeSuccess ? '#2dba6e' : '#f04f4f';
         const icon  = p.probeSuccess ? '✓' : '✗';
         const label = bbIsSsh(p.module) ? 'SSH' : 'ICMP';
+        // The source is named by its source_label value, so several aliases
+        // sharing this node stay distinguishable.
+        const self = bbShortHost(p.srcName || host || instance);
         const dest = bbShortHost(p.target || p.destHost);
         return `&nbsp;&nbsp;<span style="color:${c}">${icon} ${label} ${self} → ${dest}</span>`;
       });
@@ -1049,8 +1064,9 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const topoN = topoNodes.find(n =>
         n.id === name || n.id === host || (n.label ?? n.id) === name || (n.label ?? n.id) === host);
       if (topoN) return mergedTopoToInstance[topoN.id] ?? null;
-      // Alias blackbox
-      const aliasTarget = bbDestAliases[name] || bbDestAliases[host];
+      // Alias blackbox -- this resolver is fed both probe ends, so both maps apply
+      const aliasTarget = bbDestAliases[name] || bbDestAliases[host]
+                       || bbSrcAliases[name]  || bbSrcAliases[host];
       if (aliasTarget) {
         const aN = topoNodes.find(n => n.id === aliasTarget || (n.label ?? n.id) === aliasTarget);
         if (aN) return mergedTopoToInstance[aN.id] ?? null;
@@ -1234,27 +1250,27 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     if (hn && !hostToNodeId[hn]) hostToNodeId[hn] = srvId;
   });
 
+  // Index `probes` under every name that designates `targetHost`. Merge, never
+  // overwrite: several probe keys (several aliases) can resolve to the same
+  // node, and its tooltip must list them all.
+  const indexProbesUnder = (index, targetHost, probes, sameProbe) => {
+    const nodeRef = hostToNodeId[targetHost];
+    const keys = [
+      targetHost,
+      nodeRef?.startsWith('__srv__') ? nodeRef.slice(7) : null,
+      mergedTopoToInstance[targetHost],
+    ].filter(Boolean);
+    keys.forEach(key => {
+      if (!index[key]) { index[key] = [...probes]; return; }
+      probes.forEach(p => { if (!index[key].some(q => sameProbe(q, p))) index[key].push(p); });
+    });
+  };
+
   // Augment bbDestByHost with resolved keys so exact lookup works for alias-prefix and suffix cases.
   // e.g. key "l1-server" -> also index under "server-l1" and "server-l1:9100"
   Object.entries({ ...bbDestByHost }).forEach(([raw, probes]) => {
     const rawHost = raw.lastIndexOf(':') > 0 ? raw.slice(0, raw.lastIndexOf(':')) : raw;
-    // Merge, never overwrite: several probe keys (several aliases) can resolve
-    // to the same node, and its tooltip must list them all.
-    const mergeInto = (key) => {
-      if (!key) return;
-      if (!bbDestByHost[key]) { bbDestByHost[key] = [...probes]; return; }
-      probes.forEach(p => {
-        if (!bbDestByHost[key].some(q => q.module === p.module && q.src === p.src && q.target === p.target))
-          bbDestByHost[key].push(p);
-      });
-    };
-    const resolveTarget = (targetHost) => {
-      mergeInto(targetHost);
-      const nodeRef = hostToNodeId[targetHost];
-      if (nodeRef?.startsWith('__srv__')) mergeInto(nodeRef.slice(7));
-      const inst = mergedTopoToInstance[targetHost];
-      if (inst) mergeInto(inst);
-    };
+    const resolveTarget = (targetHost) => indexProbesUnder(bbDestByHost, targetHost, probes, sameDestProbe);
     // Exact alias: key "alias-1" -> dest_aliases target "server"
     let resolved = false;
     const exactAlias = bbDestAliases[raw] || bbDestAliases[rawHost];
@@ -1278,6 +1294,15 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
         }
       }
     }
+  });
+
+  // Same on the source side: an aliased source hands its outgoing probes to the
+  // node it names. Only the exact form applies here, the fuzzy matches are
+  // already handled by findBbOutgoingProbes.
+  Object.entries({ ...bbSrcByHost }).forEach(([raw, probes]) => {
+    const rawHost = raw.lastIndexOf(':') > 0 ? raw.slice(0, raw.lastIndexOf(':')) : raw;
+    const alias   = bbSrcAliases[raw] || bbSrcAliases[rawHost];
+    if (alias && hostToNodeId[alias]) indexProbesUnder(bbSrcByHost, alias, probes, sameOutProbe);
   });
 
   // Re-evaluate probe tips for topo-only nodes: Phase 2 built their tooltip before augmentation,
@@ -2083,9 +2108,11 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
   if (bbPromNode && !promNodeId) warnings.push(`blackbox.prometheus_node not resolved: "${bbPromNode}"`);
 
   // An alias pointing at an unknown node silently does nothing: say so.
-  new Set(Object.values(bbDestAliases)).forEach(target => {
-    if (!hostToNodeId[target] && !fuzzyNodeResolve(target))
-      warnings.push(`blackbox.dest_aliases target not resolved: "${target}"`);
+  [['dest_aliases', bbDestAliases], ['source_aliases', bbSrcAliases]].forEach(([opt, aliases]) => {
+    new Set(Object.values(aliases)).forEach(target => {
+      if (!hostToNodeId[target] && !fuzzyNodeResolve(target))
+        warnings.push(`blackbox.${opt} target not resolved: "${target}"`);
+    });
   });
 
   // Grouping by unordered pair: (A,B) and (B,A) -> same key
@@ -2104,7 +2131,10 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
         const srcRaw  = bbSrcOf(inst);
         const srcLast = srcRaw.lastIndexOf(':');
         const srcHost = srcLast > 0 ? srcRaw.slice(0, srcLast) : srcRaw;
-        const resolved = hostToNodeId[srcRaw] || hostToNodeId[srcHost]
+        // source_aliases is an explicit mapping: it wins over any name lookup.
+        const aliasNode = bbSrcAliases[srcRaw] || bbSrcAliases[srcHost];
+        const resolved = (aliasNode ? (hostToNodeId[aliasNode] || fuzzyNodeResolve(aliasNode)) : null)
+                      || hostToNodeId[srcRaw] || hostToNodeId[srcHost]
                       || fuzzyNodeResolve(srcRaw) || fuzzyNodeResolve(srcHost);
         if (resolved) srcId = resolved;
       }
@@ -2113,7 +2143,8 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       // shared by several probes, or an alias naming them all alike, would
       // otherwise keep only the first one. Identical rows are dropped below.
       const probeTarget = bbTargetOf(inst) || targetRaw;
-      const seenKey = `${srcId}:::${targetRaw}:::${probeTarget}:::${bbInstanceOf(inst)}`;
+      const srcName     = bbSrcOf(inst);
+      const seenKey = `${srcId}:::${srcName}:::${targetRaw}:::${probeTarget}:::${bbInstanceOf(inst)}`;
       if (seen.has(seenKey)) return;
       seen.add(seenKey);
 
@@ -2148,8 +2179,9 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       // global target label: the edge click must query the right one.
       e.targetLabels[probeTarget] = bbTargetLabelOf(inst);
       // module = actual probe name (display), role = configured role (filters)
-      const probe = { module: inst.labels.module || role, role, probeUp: parseFloat(inst.value) === 1, target: probeTarget };
-      if (!probeList.some(p => p.module === probe.module && p.target === probe.target && p.probeUp === probe.probeUp))
+      const probe = { module: inst.labels.module || role, role, probeUp: parseFloat(inst.value) === 1, target: probeTarget, srcName };
+      if (!probeList.some(p => p.module === probe.module && p.target === probe.target &&
+                               p.srcName === probe.srcName && p.probeUp === probe.probeUp))
         probeList.push(probe);
     });
   };
@@ -2210,6 +2242,12 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
     }
 
     // -- Tooltip probes ------------------------------------------
+    // A single source name replaces the node name: it is what the config says.
+    const bbSrcNames = probes => [...new Set(probes.map(p => p.srcName).filter(Boolean))];
+    const srcLabelOf = (probes, fallback) => {
+      const names = bbSrcNames(probes);
+      return names.length === 1 ? esc(names[0]) : fallback;
+    };
     const fmtProbeDir = (probes, targets, label) => {
       if (!probes.length) return [];
       const rows = [];
@@ -2218,24 +2256,33 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
         rows.push(`<span style="color:#7e8aaa">targets:</span> <b style="color:#c9d1e8">${targets.map(esc).join(', ')}</b>`);
       else if (targets.length === 1)
         rows.push(`<span style="color:#7e8aaa">target:</span> <b style="color:#c9d1e8">${esc(targets[0])}</b>`);
+      // Several source aliases can share one node, and so one edge: name them
+      // the same way the targets are named.
+      const sources = bbSrcNames(probes);
+      if (sources.length > 1)
+        rows.push(`<span style="color:#7e8aaa">sources:</span> <b style="color:#c9d1e8">${sources.map(esc).join(', ')}</b>`);
       probes.forEach(p => {
-        const c   = p.probeUp ? '#2dba6e' : '#f04f4f';
-        const tgt = targets.length > 1 ? `<span style="color:#7e8aaa"> (${esc(p.target)})</span>` : '';
-        rows.push(`<span style="color:#7e8aaa">${esc(p.module)}:</span> <b style="color:${c}">${p.probeUp ? 'UP' : 'DOWN'}</b>${tgt}`);
+        const c     = p.probeUp ? '#2dba6e' : '#f04f4f';
+        const parts = [
+          sources.length > 1 ? p.srcName : null,
+          targets.length > 1 ? p.target  : null,
+        ].filter(Boolean);
+        const detail = parts.length ? `<span style="color:#7e8aaa"> (${parts.map(esc).join(' → ')})</span>` : '';
+        rows.push(`<span style="color:#7e8aaa">${esc(p.module)}:</span> <b style="color:${c}">${p.probeUp ? 'UP' : 'DOWN'}</b>${detail}`);
       });
       return rows;
     };
 
     const tipRows = [`<b style="color:#00cfff">blackbox probe</b>`];
     if (bidir) {
-      tipRows.push(...fmtProbeDir(probesAB, targetsAB, `${nameA} → ${nameB}`));
+      tipRows.push(...fmtProbeDir(probesAB, targetsAB, `${srcLabelOf(probesAB, nameA)} → ${nameB}`));
       tipRows.push('<span style="color:#2a3354">╌╌╌╌╌╌╌╌╌╌╌</span>');
-      tipRows.push(...fmtProbeDir(probesBA, targetsBA, `${nameB} → ${nameA}`));
+      tipRows.push(...fmtProbeDir(probesBA, targetsBA, `${srcLabelOf(probesBA, nameB)} → ${nameA}`));
     } else if (probesAB.length) {
-      if (bbSrcLabel) tipRows.push(`<span style="color:#7e8aaa">source:</span> <b style="color:#c9d1e8">${nameA}</b>`);
+      if (bbSrcLabel) tipRows.push(`<span style="color:#7e8aaa">source:</span> <b style="color:#c9d1e8">${srcLabelOf(probesAB, nameA)}</b>`);
       tipRows.push(...fmtProbeDir(probesAB, targetsAB, null));
     } else {
-      if (bbSrcLabel) tipRows.push(`<span style="color:#7e8aaa">source:</span> <b style="color:#c9d1e8">${nameB}</b>`);
+      if (bbSrcLabel) tipRows.push(`<span style="color:#7e8aaa">source:</span> <b style="color:#c9d1e8">${srcLabelOf(probesBA, nameB)}</b>`);
       tipRows.push(...fmtProbeDir(probesBA, targetsBA, null));
     }
 
@@ -3833,6 +3880,10 @@ async function fetchAll() {
       bbDestAliases = {};
       Object.entries(d.blackbox?.dest_aliases || {}).forEach(([node, aliases]) => {
         (aliases || []).forEach(alias => { bbDestAliases[alias] = node; });
+      });
+      bbSrcAliases = {};
+      Object.entries(d.blackbox?.source_aliases || {}).forEach(([node, aliases]) => {
+        (aliases || []).forEach(alias => { bbSrcAliases[alias] = node; });
       });
       libvirtEnabled       = d.libvirt   != null && d.libvirt?.enabled   !== false;
       libvirtInstanceLabel = d.libvirt?.instance_label || instanceLabel;
