@@ -179,7 +179,7 @@ webhooks:                                 # remove section or set enabled: false
 
 | Section | Purpose |
 |---|---|
-| `nodes` | Static infrastructure nodes (router, switch, cloud, firewall, vm, lxc, kube, zigbee, wifi) |
+| `nodes` | Static infrastructure nodes (router, switch, server, cloud, firewall, vm, lxc, kube, zigbee, wifi) |
 | `networks` | CIDR ranges that auto-attach Prometheus hosts to a gateway node |
 | `zones` | Visual grouping bubbles driven by the Prometheus `zone` label |
 | `tunnels` | WireGuard tunnels shown as dashed links with dedicated interface metrics |

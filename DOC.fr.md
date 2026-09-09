@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.22.4**
+Version : **0.22.5**
 
 ---
 
@@ -573,7 +573,7 @@ nodes:
 |---|---|---|
 | `id` | oui | Identifiant unique. Peut correspondre à un nom d'hôte Prometheus |
 | `label` | non | Nom affiché (défaut : `id`) |
-| `type` | oui | `cloud`, `router`, `firewall`, `switch`, `vm`, `lxc`, `kube`, `zigbee`, `wifi` |
+| `type` | oui | `cloud`, `router`, `firewall`, `switch`, `server`, `vm`, `lxc`, `kube`, `zigbee`, `wifi` |
 | `parent` | non | ID du noeud parent (crée un lien) |
 | `children` | non | Liste de noeuds enfants — équivalent à définir `parent` sur chaque enfant |
 | `interface` | non | Interface à afficher dans l'infobulle du lien vers le parent |
@@ -588,6 +588,7 @@ nodes:
 | `router` | cyan `#00cfff` |
 | `firewall` | orange `#e0972a` |
 | `switch` | bleu `#4a8adf` |
+| `server` | vert `#2dba6e` |
 | `vm` | violet `#c084fc` |
 | `lxc` | vert `#34d399` |
 | `kube` | indigo `#818cf8` |
@@ -1255,7 +1256,7 @@ Neuf bascules du menu VIEWS masquent les noeuds invités par type et par état. 
 | lxc | `lxc` | LXC UNMONITORED / LXC DOWN / LXC UP |
 | pod | `kube` | POD UNMONITORED / POD DOWN / POD UP |
 
-Les noeuds de tout autre type (`cloud`, `router`, `firewall`, `switch`, `zigbee`, `wifi`) n'ont pas de type invité et ne sont jamais affectés par ces bascules.
+Les noeuds de tout autre type (`cloud`, `router`, `firewall`, `switch`, `server`, `zigbee`, `wifi`) n'ont pas de type invité et ne sont jamais affectés par ces bascules.
 
 Le type invité est déduit du `type` de topologie pour les noeuds déclarés dans `topology.yaml`, et de la valeur de `guest_label` pour les hôtes découverts dans Prometheus. Avec `guest_label: role`, une cible étiquetée `role: vm` obtient donc le type `vm` et suit les bascules VM, tandis que `role: host` n'a pas de type invité.
 

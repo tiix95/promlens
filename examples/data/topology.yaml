@@ -2,7 +2,7 @@
 # Every node declared here is rendered even without a matching Prometheus metric.
 # node_exporter instances are attached to their gateway by CIDR matching.
 #
-# Available types: cloud, router, firewall, switch, vm, lxc, kube, zigbee, wifi
+# Available types: cloud, router, firewall, switch, server, vm, lxc, kube, zigbee, wifi
 #
 # children      : alternative to parent -- declares child nodes directly under their parent.
 # inherit_zone  : set to false so a node does not inherit its parent zone (default: true).

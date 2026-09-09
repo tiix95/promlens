@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.22.4**
+Version: **0.22.5**
 
 ---
 
@@ -573,7 +573,7 @@ nodes:
 |---|---|---|
 | `id` | yes | Unique identifier. Can match a Prometheus hostname |
 | `label` | no | Display name (default: `id`) |
-| `type` | yes | `cloud`, `router`, `firewall`, `switch`, `vm`, `lxc`, `kube`, `zigbee`, `wifi` |
+| `type` | yes | `cloud`, `router`, `firewall`, `switch`, `server`, `vm`, `lxc`, `kube`, `zigbee`, `wifi` |
 | `parent` | no | ID of the parent node (creates a link) |
 | `children` | no | List of child nodes — equivalent to setting `parent` on each child |
 | `interface` | no | Interface to show in the link tooltip toward the parent |
@@ -588,6 +588,7 @@ nodes:
 | `router` | cyan `#00cfff` |
 | `firewall` | orange `#e0972a` |
 | `switch` | blue `#4a8adf` |
+| `server` | green `#2dba6e` |
 | `vm` | purple `#c084fc` |
 | `lxc` | green `#34d399` |
 | `kube` | indigo `#818cf8` |
@@ -1255,7 +1256,7 @@ Nine toggles in the VIEWS dropdown hide guest nodes by kind and state. All are v
 | lxc | `lxc` | LXC UNMONITORED / LXC DOWN / LXC UP |
 | pod | `kube` | POD UNMONITORED / POD DOWN / POD UP |
 
-Nodes of any other type (`cloud`, `router`, `firewall`, `switch`, `zigbee`, `wifi`) have no kind and are never affected by these toggles.
+Nodes of any other type (`cloud`, `router`, `firewall`, `switch`, `server`, `zigbee`, `wifi`) have no kind and are never affected by these toggles.
 
 A kind is resolved from the topology `type` for nodes declared in `topology.yaml`, and from the `guest_label` value for hosts discovered in Prometheus. With `guest_label: role`, a target labelled `role: vm` therefore gets kind `vm` and obeys the VM toggles, while `role: host` gets no kind.
 

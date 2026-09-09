@@ -180,7 +180,7 @@ webhooks:                                 # supprimer la section ou mettre enabl
 
 | Section | Role |
 |---|---|
-| `nodes` | Noeuds d'infrastructure statiques (router, switch, cloud, firewall, vm, lxc, kube, zigbee, wifi) |
+| `nodes` | Noeuds d'infrastructure statiques (router, switch, server, cloud, firewall, vm, lxc, kube, zigbee, wifi) |
 | `networks` | Plages CIDR qui rattachent automatiquement les hosts Prometheus a un noeud gateway |
 | `zones` | Bulles de regroupement visuel pilotees par le label Prometheus `zone` |
 | `tunnels` | Tunnels WireGuard affiches en liens pointilles avec leurs metriques d'interface dediees |
