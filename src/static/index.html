@@ -91,7 +91,9 @@
     #netWrap:fullscreen #fsBar{display:flex}
     #netWrap:fullscreen #fsBar.visible{opacity:1;pointer-events:auto}
     #netWrap:fullscreen .legend{display:none}
-    #netWrap:fullscreen .vis-tooltip{display:none!important}
+    /* The tooltip lives inside the canvas frame, so it follows netWrap into fullscreen:
+       it only needs to stay above the fullscreen toolbar. */
+    #netWrap:fullscreen .vis-tooltip{z-index:30!important}
     .l-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
     .l-line{width:18px;height:2px;border-radius:1px;flex-shrink:0}
     .l-dashed{width:18px;height:0;border-top:2px dashed;flex-shrink:0}
