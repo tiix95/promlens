@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.24.1**
+Version: **0.24.2**
 
 ---
 
@@ -687,6 +687,26 @@ topology node "mynode": unknown type "nas"
 
 Previously the fallback was silent and always used the switch icon, which could make a monitored server look like a switch.
 
+**Declaring the same node twice:**
+
+A node can be declared several times in the file: a stub inside the `children` list of its parent, plus a full declaration elsewhere. All entries sharing the same `id` are merged into a single node. The first occurrence keeps its position in the list and its own values; the later ones only fill in the keys it is missing (typically `type`, `label`, `ip`, `interface`). The `parent` deduced from the `children` nesting is kept, so the attachment works whatever the declaration order in the file.
+
+```yaml
+nodes:
+  - id: sw1
+    type: switch
+    children:
+      - id: nas1          # stub: only declares the parent link
+  - id: nas1              # full declaration, merged with the stub above
+    label: Storage
+    type: server
+    ip: 192.168.1.20
+```
+
+The result is one `nas1` node, child of `sw1`, drawn with the `server` icon. No `missing type` warning is emitted for the stub, and no duplicate node is created.
+
+`type` is still required somewhere: a node declared without `type` in any of its entries keeps the `missing type` warning and the fallback icon. An entry without an `id` is never merged and is kept as is.
+
 **Node type colors:**
 
 | Type | Color |
@@ -915,7 +935,7 @@ When the `blackbox` section is present, `blackbox.modules` is always returned wi
 
 ### GET /api/topology
 
-Parses and returns `topology.yaml`. Flattens nested `children` into a flat node list with `parent` set.
+Parses and returns `topology.yaml`. Flattens nested `children` into a flat node list with `parent` set, then merges the entries sharing the same `id` into a single node (see [nodes](#nodes)).
 
 ```bash
 curl -s http://127.0.0.1:8001/api/topology | jq .nodes[0]

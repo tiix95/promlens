@@ -526,7 +526,34 @@ def _flatten_nodes(nodes: list, parent_id: str | None = None) -> list:
             n["parent"] = parent_id
         result.append(n)
         if "children" in node:
-            result.extend(_flatten_nodes(node["children"], n["id"]))
+            result.extend(_flatten_nodes(node["children"], n.get("id")))
+    return result
+
+
+def _merge_nodes(nodes: list) -> list:
+    """Merge the flattened nodes sharing the same id into a single node.
+
+    The same node is often declared twice: a stub inside the `children` list of
+    its parent, plus a full declaration elsewhere in the file. Both entries
+    describe the same device, so they are merged instead of being rendered
+    twice. The first occurrence keeps its position and its own values, the
+    later ones only fill in the keys it is missing (typically `type`).
+    """
+    merged: dict = {}
+    result = []
+    for node in nodes:
+        node_id = node.get("id")
+        if node_id is None:
+            result.append(node)
+            continue
+        first = merged.get(node_id)
+        if first is None:
+            merged[node_id] = node
+            result.append(node)
+            continue
+        logger.debug("topology node %r declared more than once -- merged", node_id)
+        for key, value in node.items():
+            first.setdefault(key, value)
     return result
 
 
@@ -538,7 +565,7 @@ async def get_topology():
         return {"nodes": [], "networks": []}
     try:
         data = yaml.safe_load(path.read_text()) or {}
-        nodes = _flatten_nodes(data.get("nodes", []))
+        nodes = _merge_nodes(_flatten_nodes(data.get("nodes", [])))
         logger.debug("topology loaded: %d nodes, %d networks",
                      len(nodes), len(data.get("networks", [])))
         return {"nodes": nodes, "networks": data.get("networks", []), "zones": data.get("zones", []), "tunnels": data.get("tunnels", []), "links": data.get("links", []), "cameras": data.get("cameras", [])}

@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.24.1**
+Version : **0.24.2**
 
 ---
 
@@ -687,6 +687,26 @@ topology node "mynode": unknown type "nas"
 
 Auparavant le repli était silencieux et affichait toujours l'icône switch, ce qui pouvait laisser croire qu'un serveur monitoré était un switch.
 
+**Déclarer le même noeud plusieurs fois :**
+
+Un noeud peut être déclaré plusieurs fois dans le fichier : un stub dans la liste `children` de son parent, plus une déclaration complète ailleurs. Toutes les entrées partageant le même `id` sont fusionnées en un seul noeud. La première occurrence garde sa position dans la liste et ses propres valeurs ; les suivantes ne font que compléter les clés manquantes (typiquement `type`, `label`, `ip`, `interface`). Le `parent` déduit de l'imbrication `children` est conservé, donc le rattachement fonctionne quel que soit l'ordre des déclarations dans le fichier.
+
+```yaml
+nodes:
+  - id: sw1
+    type: switch
+    children:
+      - id: nas1          # stub : declare seulement le lien vers le parent
+  - id: nas1              # declaration complete, fusionnee avec le stub ci-dessus
+    label: Storage
+    type: server
+    ip: 192.168.1.20
+```
+
+Le résultat est un seul noeud `nas1`, enfant de `sw1`, dessiné avec l'icône `server`. Aucun avertissement `missing type` n'est émis pour le stub, et aucun noeud dupliqué n'est créé.
+
+`type` reste obligatoire quelque part : un noeud déclaré sans `type` dans aucune de ses entrées conserve l'avertissement `missing type` et l'icône de repli. Une entrée sans `id` n'est jamais fusionnée et est conservée telle quelle.
+
 **Couleurs par type de noeud :**
 
 | Type | Couleur |
@@ -915,7 +935,7 @@ Quand la section `blackbox` est présente, `blackbox.modules` est toujours renvo
 
 ### GET /api/topology
 
-Analyse et renvoie `topology.yaml`. Aplatit les `children` imbriqués en une liste plate de noeuds avec `parent` défini.
+Analyse et renvoie `topology.yaml`. Aplatit les `children` imbriqués en une liste plate de noeuds avec `parent` défini, puis fusionne les entrées partageant le même `id` en un seul noeud (voir [nodes](#nodes)).
 
 ```bash
 curl -s http://127.0.0.1:8001/api/topology | jq .nodes[0]
