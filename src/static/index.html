@@ -232,6 +232,50 @@
     .ap-alert-row:first-child{border-top:none;padding-top:0}
     .ap-alert-row-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text0)}
     .ap-alert-row-sum{font-family:var(--mono);font-size:10px;color:var(--text2);margin-top:2px;line-height:1.5}
+
+    /* -- NEW ALERT OVERLAY -- */
+    #alertOverlay{position:fixed;inset:0;z-index:900;display:none;align-items:center;justify-content:center;cursor:pointer;
+      background:radial-gradient(ellipse at center,rgba(120,8,8,.42) 0%,rgba(6,8,16,.90) 70%);backdrop-filter:blur(3px);
+      animation:aoFade .16s ease-out}
+    #alertOverlay.show{display:flex}
+    #alertOverlay::after{content:'';position:absolute;inset:0;pointer-events:none;
+      background:repeating-linear-gradient(0deg,rgba(240,79,79,.055) 0 2px,transparent 2px 4px)}
+    .ao-card{position:relative;width:min(660px,88vw);padding:34px 38px 30px;text-align:center;border-radius:10px;
+      background:linear-gradient(165deg,#2c0a11 0%,#180711 55%,#0d0510 100%);border:1px solid rgba(240,79,79,.5);
+      box-shadow:0 0 80px rgba(240,79,79,.30),0 26px 60px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.05);
+      animation:aoPop .34s cubic-bezier(.18,1.25,.4,1)}
+    .ao-card::before{content:'';position:absolute;inset:-3px;border-radius:12px;border:1px solid var(--err);
+      animation:aoPulse 1.15s ease-in-out infinite;pointer-events:none}
+    .ao-stripes{position:absolute;top:0;left:0;right:0;height:4px;border-radius:10px 10px 0 0;overflow:hidden;
+      background:repeating-linear-gradient(115deg,var(--err) 0 14px,#1a0509 14px 28px);opacity:.9}
+    .ao-badge{display:inline-flex;align-items:center;gap:7px;padding:3px 11px;border-radius:11px;
+      background:var(--err-dim);border:1px solid var(--err-border);
+      font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.18em;color:var(--err)}
+    .ao-badge .ao-dot{width:6px;height:6px;border-radius:50%;background:var(--err);box-shadow:0 0 8px var(--err);
+      animation:blink 1s ease infinite}
+    .ao-kicker{margin-top:16px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.42em;color:rgba(240,79,79,.72)}
+    .ao-name{margin-top:6px;font-family:var(--sans);font-size:clamp(26px,4.2vw,44px);font-weight:800;letter-spacing:.01em;
+      line-height:1.1;color:#fff;text-shadow:0 0 26px rgba(240,79,79,.55);word-break:break-word}
+    .ao-node{margin-top:12px;display:inline-block;padding:4px 12px;border-radius:4px;background:rgba(0,0,0,.4);
+      border:1px solid rgba(240,79,79,.30);font-family:var(--mono);font-size:13px;color:#ffd9d9}
+    .ao-summary{margin-top:14px;font-family:var(--mono);font-size:11px;line-height:1.65;color:#e5b7b7;
+      max-height:88px;overflow:hidden}
+    .ao-extra{margin-top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:rgba(240,79,79,.8)}
+    .ao-ftr{margin-top:22px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+      font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:rgba(229,183,183,.55)}
+    .ao-mute{background:none;border:1px solid rgba(240,79,79,.3);border-radius:4px;color:rgba(229,183,183,.75);
+      padding:4px 9px;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;line-height:1;
+      cursor:pointer;transition:border-color .15s,color .15s}
+    .ao-mute:hover{border-color:var(--err);color:#fff}
+    .ao-bar{position:absolute;left:0;bottom:0;height:3px;width:100%;background:rgba(0,0,0,.45);border-radius:0 0 10px 10px;overflow:hidden}
+    .ao-bar-fill{height:100%;width:100%;background:linear-gradient(90deg,#ff8a8a,var(--err));box-shadow:0 0 10px var(--err)}
+    @keyframes aoFade{from{opacity:0}to{opacity:1}}
+    @keyframes aoPop{from{opacity:0;transform:scale(.86) translateY(14px)}to{opacity:1;transform:none}}
+    @keyframes aoPulse{0%,100%{opacity:.25;transform:scale(1)}50%{opacity:.75;transform:scale(1.012)}}
+    @media (prefers-reduced-motion:reduce){
+      #alertOverlay,.ao-card{animation:none}
+      .ao-card::before,.ao-badge .ao-dot{animation:none}
+    }
   </style>
 </head>
 <body>
@@ -445,6 +489,25 @@
     <div class="ap-body" id="apBody">
       <div class="ap-empty">No active alert</div>
     </div>
+  </div>
+</div>
+
+<!-- Full-screen banner raised when a new alert shows up (alert_overlay section) -->
+<div id="alertOverlay" role="alertdialog" aria-live="assertive" aria-hidden="true">
+  <div class="ao-card">
+    <div class="ao-stripes"></div>
+    <div class="ao-badge"><span class="ao-dot"></span><span id="aoSeverity">CRITICAL</span></div>
+    <div class="ao-kicker">NEW ALERT</div>
+    <div id="aoName" class="ao-name"></div>
+    <div id="aoNode" class="ao-node"></div>
+    <div id="aoSummary" class="ao-summary"></div>
+    <div id="aoExtra" class="ao-extra"></div>
+    <div class="ao-ftr">
+      <span id="aoQueue"></span>
+      <span>CLICK OR ESC TO DISMISS</span>
+      <button id="aoMute" class="ao-mute" title="Mute the siren">MUTE</button>
+    </div>
+    <div class="ao-bar"><div id="aoBarFill" class="ao-bar-fill"></div></div>
   </div>
 </div>
 
@@ -1342,7 +1405,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       if (fh.length) r.push(`HTTP: ${fh.join(', ')}`);
       const fb = bbFailingLabels(findBbProbes(key, key));
       if (fb.length) r.push(`probe: ${fb.join(', ')}`);
-      if (r.length) issues.push({ label, severity: 'orange', reason: r.join(', ') });
+      if (r.length) issues.push({ label, severity: 'orange', kind: 'BlackboxProbeFailed', reason: r.join(', ') });
     }
   });
 
@@ -1527,7 +1590,17 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
         const fb = bbFailingLabels(findBbProbes(instance, host));
         if (fb.length) r.push(`probe: ${fb.join(', ')}`);
       }
-      if (r.length) issues.push({ label: nodeLabel, severity: color === '#f04f4f' ? 'red' : 'orange', reason: r.join(', ') });
+      // Alert name used by the overlay filter: the most significant reason wins
+      const kindOf = () => {
+        if (!isUp) return 'InstanceDown';
+        if (bbProbeFailing(instance, host) || tcpFailing(instance, host) || httpFailing(instance, host)) return 'BlackboxProbeFailed';
+        if (failed.length) return 'SystemdUnitFailed';
+        if (cpuRatio  != null && cpuRatio  >= getThr(nodeId, 'cpu',  'orange')) return 'CpuHigh';
+        if (memRatio  != null && memRatio  >= getThr(nodeId, 'mem',  'orange')) return 'MemoryHigh';
+        if (diskRatio != null && diskRatio >= getThr(nodeId, 'disk', 'orange')) return 'DiskHigh';
+        return 'NodeIssue';
+      };
+      if (r.length) issues.push({ label: nodeLabel, severity: color === '#f04f4f' ? 'red' : 'orange', kind: kindOf(), reason: r.join(', ') });
     }
 
     // This host is already represented by a topology node -- update icon + full tooltip
@@ -2058,7 +2131,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
             wgRatio   = rate / cap;
             edgeColor = thrColors && wgRatio >= thresholds.network.red    ? '#f04f4f'
                       : thrColors && wgRatio >= thresholds.network.orange ? '#e0972a' : '#4a8adf';
-            if (thrColors && wgRatio >= thresholds.network.orange) issues.push({ label: `${t.from} ↔ ${toName}`, severity: wgRatio >= thresholds.network.red ? 'red' : 'orange', reason: `WireGuard ${(wgRatio*100).toFixed(0)}%` });
+            if (thrColors && wgRatio >= thresholds.network.orange) issues.push({ label: `${t.from} ↔ ${toName}`, severity: wgRatio >= thresholds.network.red ? 'red' : 'orange', kind: 'NetworkHigh', reason: `WireGuard ${(wgRatio*100).toFixed(0)}%` });
           }
 
           const rows = [];
@@ -2240,7 +2313,7 @@ function buildGraph(topo, promData, netMetrics = {}, hostMetrics = {}, systemdFa
       const allTargets = new Set(allProbes.map(p => p.target).filter(Boolean));
       const failMods = [...new Set(allProbes.filter(p => !p.probeUp).map(p =>
         allTargets.size > 1 && p.target ? `${p.module} ${p.target}` : p.module))];
-      issues.push({ label: `${bbNodeName(nodeA)} ↔ ${bbNodeName(nodeB)}`, severity: 'red', reason: `probe ${failMods.join('+')} down` });
+      issues.push({ label: `${bbNodeName(nodeA)} ↔ ${bbNodeName(nodeB)}`, severity: 'red', kind: 'BlackboxProbeFailed', reason: `probe ${failMods.join('+')} down` });
     }
 
     // -- Tooltip probes ------------------------------------------
@@ -3380,6 +3453,243 @@ function showPromAlerts(alerts) {
   $('promAlertList').innerHTML = rows.join('');
 }
 
+// ── NEW ALERT OVERLAY ────────────────────────────────────────
+// A new alert raises a full-screen banner and, when configured, a ship horn.
+// Whether an alert is new is decided from the server state (/api/alert-state):
+// every browser then agrees, and reloading the page does not replay an alert
+// that has been firing for hours.
+
+let overlayCfg     = null;       // alert_overlay section of /api/config, null when disabled
+let overlayQueue   = [];         // alerts waiting for their turn on screen
+const overlayShown = new Set();  // keys already displayed, dropped when the alert resolves
+let overlayTimer   = null;
+let overlayMuted   = false;
+
+const BLAST_SECONDS = 2.6;       // one ship horn blast, tail included
+// Envelope peak keeping the summed partials under 0 dBFS at volume 1.0.
+// Measured on the partial gains below: raise one and this has to come down.
+const HORN_PEAK = 0.62;
+
+// -- Ship horn ------------------------------------------------
+// Synthesized rather than shipped as an audio file: no binary asset, no
+// third-party licence, and nothing to fetch outside the page.
+let audioCtx  = null;
+let hornNodes = null;            // { master, oscillators } of the blast being played
+
+function audioContext() {
+  if (!audioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    audioCtx = new Ctx();
+  }
+  // Browsers start the context suspended until the user interacts with the page
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  return audioCtx;
+}
+
+function stopHorn() {
+  if (!hornNodes) return;
+  const { master, oscillators } = hornNodes;
+  hornNodes = null;
+  try {
+    const t = audioCtx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(Math.max(master.gain.value, 0.0001), t);
+    master.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    oscillators.forEach(o => o.stop(t + 0.15));
+  } catch (_) { /* nodes already stopped */ }
+}
+
+// One blast: a low fundamental with its fifth and octave, slow attack and a
+// long tail -- what makes a horn sound like a ship rather than a beep.
+function hornBlast(ctx, dest, lfo, startAt) {
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.0001, startAt);
+  env.gain.exponentialRampToValueAtTime(HORN_PEAK, startAt + 0.30);
+  env.gain.setValueAtTime(HORN_PEAK, startAt + 1.55);
+  env.gain.exponentialRampToValueAtTime(0.0001, startAt + 2.35);
+  env.connect(dest);
+
+  return [[68, 1], [102, .62], [136, .5], [204, .22], [272, .1]].map(([freq, gain]) => {
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    // Pitch slides up during the attack, the way the air pressure builds up
+    osc.frequency.setValueAtTime(freq * 0.965, startAt);
+    osc.frequency.exponentialRampToValueAtTime(freq, startAt + 0.45);
+    lfo.connect(osc.frequency);
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    osc.connect(g); g.connect(env);
+    osc.start(startAt); osc.stop(startAt + 2.45);
+    return osc;
+  });
+}
+
+function playShipHorn(volume, blasts) {
+  const ctx = audioContext();
+  if (!ctx || ctx.state !== 'running') return false;   // still waiting for a user gesture
+  stopHorn();
+
+  const master = ctx.createGain();
+  master.gain.value = Math.max(0.0001, Math.min(1, volume));
+  master.connect(ctx.destination);
+
+  const filter = ctx.createBiquadFilter();   // tame the sawtooth harshness
+  filter.type = 'lowpass';
+  filter.frequency.value = 1100;
+  filter.Q.value = 0.7;
+  filter.connect(master);
+
+  const lfo = ctx.createOscillator();        // slow wobble, shared by every partial
+  lfo.frequency.value = 5.2;
+  const lfoGain = ctx.createGain();
+  lfoGain.gain.value = 1.6;
+  lfo.connect(lfoGain);
+  lfo.start();
+
+  const oscillators = [lfo];
+  for (let i = 0; i < blasts; i++) {
+    oscillators.push(...hornBlast(ctx, filter, lfoGain, ctx.currentTime + 0.05 + i * BLAST_SECONDS));
+  }
+  lfo.stop(ctx.currentTime + 0.05 + blasts * BLAST_SECONDS);
+  hornNodes = { master, oscillators };
+  return true;
+}
+
+// -- Candidates -----------------------------------------------
+// fnmatch-style pattern on the alert name, matched case-insensitively
+function overlayPatternRe(pattern) {
+  let re = '^';
+  for (const ch of String(pattern)) {
+    if (ch === '*') re += '.*';
+    else if (ch === '?') re += '.';
+    else if ('\\^$.|+(){}[]'.includes(ch)) re += '\\' + ch;
+    else re += ch;
+  }
+  return new RegExp(re + '$', 'i');
+}
+
+// Both alert sources: the Prometheus alerts and the ones ProMLens derives
+// itself (the issues panel, whose `kind` acts as the alert name).
+function overlayCandidates(promAlerts, issues) {
+  const out = [];
+  (promAlerts || []).filter(a => a.state === 'firing').forEach(a => {
+    const labels = a.labels || {};
+    const key = 'prom:' + Object.keys(labels).sort().map(k => `${k}=${labels[k]}`).join(',');
+    out.push({
+      key,
+      name: labels.alertname || 'unknown',
+      node: labels[instanceLabel] || labels.instance || '',
+      severity: (labels.severity || 'critical').toLowerCase(),
+      summary: a.annotations?.summary || a.annotations?.description || '',
+    });
+  });
+  (issues || []).filter(i => i.kind).forEach(i => {
+    out.push({
+      key: `promlens:${i.kind}:${i.label}`,
+      name: i.kind,
+      node: i.label,
+      severity: i.severity === 'red' ? 'critical' : 'warning',
+      summary: i.reason || '',
+    });
+  });
+
+  const patterns = (overlayCfg.alerts || []).map(overlayPatternRe);
+  const severities = overlayCfg.severities || [];
+  return out.filter(c => patterns.some(re => re.test(c.name))
+                      && (!severities.length || severities.includes(c.severity)));
+}
+
+async function syncAlertOverlay(promAlerts, issues) {
+  if (!overlayCfg) { overlayShown.clear(); overlayQueue = []; return; }
+
+  const byKey = new Map(overlayCandidates(promAlerts, issues).map(c => [c.key, c]));
+  // Forget resolved alerts: the same alert firing again must pop the overlay again
+  [...overlayShown].forEach(k => { if (!byKey.has(k)) overlayShown.delete(k); });
+
+  let firstSeen, now;
+  try {
+    const r = await fetch('/api/alert-state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys: [...byKey.keys()] }),
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    firstSeen = d.first_seen || {};
+    now = d.now;
+  } catch (_) { return; }
+
+  // An alert counts as new while it is younger than two refresh cycles: a
+  // browser opened right after it fired still gets the overlay.
+  const refresh = parseInt($('refreshSel').value) || 30;
+  const grace = Math.max(30, refresh * 2 + 10);
+  const fresh = [...byKey.values()]
+    .filter(c => !overlayShown.has(c.key) && (now - (firstSeen[c.key] ?? 0)) <= grace);
+  if (!fresh.length) return;
+
+  fresh.forEach(c => overlayShown.add(c.key));
+  // A network outage can fail dozens of probes at once: cap the queue instead
+  // of holding the screen hostage, and say how many were left out.
+  const max = overlayCfg.max_queue || 5;
+  const kept = fresh.slice(0, max);
+  if (fresh.length > max) kept[kept.length - 1].extra = fresh.length - max;
+  overlayQueue.push(...kept);
+  if (!overlayTimer) showNextOverlay();
+}
+
+// -- Display --------------------------------------------------
+function showNextOverlay() {
+  if (!overlayCfg) overlayQueue = [];   // disabled while a queue was pending
+  const item = overlayQueue.shift();
+  const box  = $('alertOverlay');
+  if (!item) {
+    box.classList.remove('show');
+    box.setAttribute('aria-hidden', 'true');
+    return;
+  }
+
+  $('aoSeverity').textContent = (item.severity || 'critical').toUpperCase();
+  $('aoName').textContent     = item.name;
+  $('aoNode').textContent     = item.node || '';
+  $('aoNode').style.display   = item.node ? '' : 'none';
+  $('aoSummary').textContent  = item.summary || '';
+  $('aoQueue').textContent    = overlayQueue.length ? `+${overlayQueue.length} QUEUED` : '';
+
+  const sound = overlayCfg.sound && !overlayMuted;
+  const played = sound ? playShipHorn(overlayCfg.volume ?? 0.7, overlayCfg.blasts || 2) : false;
+  const notes = [];
+  if (item.extra) notes.push(`+${item.extra} more alert${item.extra > 1 ? 's' : ''} not shown`);
+  if (sound && !played) notes.push('sound blocked by the browser - click the page once to allow it');
+  $('aoExtra').textContent = notes.join(' | ');
+
+  $('aoMute').textContent = overlayMuted ? 'UNMUTE' : 'MUTE';
+  box.classList.add('show');
+  box.setAttribute('aria-hidden', 'false');
+
+  // Countdown bar, driven by the configured duration
+  const duration = overlayCfg.duration || 10;
+  const fill = $('aoBarFill');
+  fill.style.transition = 'none';
+  fill.style.width = '100%';
+  requestAnimationFrame(() => {
+    fill.style.transition = `width ${duration}s linear`;
+    fill.style.width = '0%';
+  });
+
+  clearTimeout(overlayTimer);
+  overlayTimer = setTimeout(dismissOverlay, duration * 1000);
+}
+
+function dismissOverlay() {
+  clearTimeout(overlayTimer);
+  overlayTimer = null;
+  stopHorn();
+  showNextOverlay();
+}
+
+function overlayVisible() { return $('alertOverlay').classList.contains('show'); }
+
 function openAlertsPage() {
   stopAlertBlink();
   document.querySelector('.main').style.display = 'none';
@@ -3913,6 +4223,8 @@ async function fetchAll() {
       thresholdColors = d.threshold_colors !== false;
       if (d.thresholds)         thresholds        = d.thresholds;
       if (d.thresholds_by_node) thresholdsByNode  = d.thresholds_by_node;
+      overlayCfg = d.alert_overlay || null;
+      if (!overlayCfg && overlayVisible()) { overlayQueue = []; dismissOverlay(); }
     }
   } catch (_) {}
 
@@ -4024,6 +4336,9 @@ async function fetchAll() {
     const _alertsRaw = alertsR.ok ? await alertsR.json() : [];
     showPromAlerts(Array.isArray(_alertsRaw) ? _alertsRaw : (_alertsRaw?.data?.alerts ?? []));
     showIssues(issues);
+    // Skipped when the alert fetch failed: an empty list would resolve every
+    // alert in the state and replay the overlay when they come back.
+    if (alertsR.ok) syncAlertOverlay(lastAlerts, issues);
     showWarnings(warnings);
     showLinks(edges, nodes);
     showOrphans(orphanNodes);
@@ -4181,6 +4496,27 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'ArrowUp')   { e.preventDefault(); moveSearchSel(-1); }
     if (e.key === 'Enter')     { e.preventDefault(); selectSearchResult(smIndex); }
   });
+
+  // The overlay swallows Escape first: it is the topmost thing on screen
+  document.addEventListener('keydown', e => {
+    // An open <dialog> sits in the top layer, above the overlay: it keeps Escape
+    if (e.key === 'Escape' && overlayVisible() && !document.querySelector('dialog[open]')) {
+      e.preventDefault();
+      e.stopPropagation();   // do not also close the alerts page underneath
+      overlayQueue = [];
+      dismissOverlay();
+    }
+  }, true);
+  $('alertOverlay').addEventListener('click', () => { overlayQueue = []; dismissOverlay(); });
+  $('aoMute').addEventListener('click', e => {
+    e.stopPropagation();
+    overlayMuted = !overlayMuted;
+    $('aoMute').textContent = overlayMuted ? 'UNMUTE' : 'MUTE';
+    if (overlayMuted) stopHorn();
+  });
+  // Audio stays blocked until the user interacts with the page at least once
+  ['pointerdown', 'keydown'].forEach(ev =>
+    document.addEventListener(ev, () => audioContext(), { once: true }));
 
   document.addEventListener('keydown', e => {
     // Ctrl+<key> (Cmd on mac): the SHORTCUTS table takes over the browser default

@@ -4,7 +4,7 @@
 
 Network topology visualizer that overlays real-time Prometheus metrics on an interactive Vis.js graph.
 
-Version: **0.21.0**
+Version: **0.24.0**
 
 ## Screenshots
 
@@ -178,6 +178,22 @@ webhooks:                                 # remove section or set enabled: false
       module: promlens
       headers:
         Authorization: "Bearer ${NOTIFY_TOKEN}"   # $VAR / ${VAR} are expanded
+
+alert_overlay:                            # remove section or set enabled: false to disable
+  enabled: true
+  sound: true                             # ship horn siren (default: true)
+  duration: 10                            # seconds on screen per alert (default: 10, clamped 2-300)
+  volume: 0.7                             # 0.0 to 1.0 (default: 0.7)
+  blasts: 2                               # horn blasts per alert, ~2.6 s each (default: 2, clamped 1-10)
+  max_queue: 5                            # overlays chained for one burst (default: 5, clamped 1-50)
+  clear_after: 60                         # seconds a gone alert is kept before being forgotten
+                                          # (default: 60, clamped 0-86400)
+  state_file: /var/lib/promlens/alerts.state  # first-seen dates (env: ALERT_STATE_FILE)
+  alerts:                                 # fnmatch patterns on the alert name, case-insensitive
+    - "*blackbox*"                        # default list: blackbox probe failures + instance down
+    - "*probefailed*"
+    - "instancedown"
+  severities: [critical]                  # extra filter on the severity label (default: all)
 ```
 
 ## topology.yaml — sections summary
@@ -204,6 +220,7 @@ Full reference and examples: see [DOC.md](DOC.md)
 | `POST` | `/api/layout` | Save node positions and view toggles |
 | `POST` | `/api/reload` | Validate and reload both config files |
 | `GET` | `/api/mtime` | Modification times of both config files |
+| `POST` | `/api/alert-state` | First time each alert was seen, for the alert overlay |
 | `GET` | `/login` | Login page (basic auth mode only) |
 | `POST` | `/api/auth/login` | Authenticate, receive session cookie |
 | `POST` | `/api/auth/logout` | Clear session cookie |
@@ -233,6 +250,7 @@ Full reference and examples: see [DOC.md](DOC.md)
 - Keyboard shortcuts — `Ctrl`/`Cmd` bindings for search, save layout, selection mode, fit, refresh; `Ctrl+H` lists them all in a help modal
 - Persistent layout — positions and toggle state saved server-side
 - Alert webhooks — server-side notifications for the alerts ProMLens computes itself (thresholds, node down, failed systemd units), no Prometheus alerting rule required
+- Alert overlay — full-screen red overlay with an optional ship-horn siren when a new alert appears; "new" is decided server-side, so every open browser agrees and reloading the page never replays an old alert
 - Config reload — RELOAD button validates and hot-reloads both YAML files
 - Auto-reload — with `auto_reload: true`, editing `promlens.yaml` or `topology.yaml` rebuilds the graph within 5 seconds, without waiting for the refresh interval
 - Security — rate limiting, CSRF protection, CSP headers

@@ -18,7 +18,7 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-COPY src/main.py src/prometheus_query.py src/auth.py src/notifier.py src/local_alerts.py ./
+COPY src/main.py src/prometheus_query.py src/auth.py src/notifier.py src/local_alerts.py src/alert_overlay.py ./
 COPY src/static/ ./static/
 
 RUN chown -R promlens:promlens /app && mkdir /data && chown promlens:promlens /data
@@ -26,6 +26,7 @@ RUN chown -R promlens:promlens /app && mkdir /data && chown promlens:promlens /d
 ENV CONFIG_FILE=/data/promlens.yaml
 ENV TOPOLOGY_FILE=/data/topology.yaml
 ENV LAYOUT_FILE=/data/layout.json
+ENV ALERT_STATE_FILE=/data/alerts.state
 ENV BIND_HOST=0.0.0.0
 ENV BIND_PORT=8000
 

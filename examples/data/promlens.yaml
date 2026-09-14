@@ -128,3 +128,35 @@ proxy:
 # When false: nodes use their neutral type color (or #c9d1e8 for pure Prometheus nodes),
 # edges show only up/down state. Probe failure and node-down colors remain active.
 # threshold_colors: false
+
+# Full-screen overlay on a new alert (optional)
+# Raises a big red banner in the middle of the screen, with a ship horn siren,
+# each time an alert appears. Remove this section (or set enabled: false) to
+# disable it.
+#
+# An alert is "new" the first time it is seen. The state is kept server side
+# (state_file) so every browser agrees and reloading the page does not replay
+# an alert that has been firing for hours. When the alert resolves, its entry
+# is dropped: if it fires again later, the overlay shows up again.
+alert_overlay:
+  enabled: true             # set to false to disable without removing the section
+  sound: true               # ship horn siren (needs one click on the page to unblock browser audio)
+  duration: 10              # seconds on screen, per alert (default: 10, range 2-300)
+  # volume: 0.7             # siren volume, 0.0 to 1.0 (default: 0.7)
+  # blasts: 2               # ship horn blasts per alert, ~2.6 s each (default: 2, range 1-10)
+  # max_queue: 5            # overlays chained for one burst of alerts (default: 5)
+  #                         # the extras are counted on the last overlay instead of queueing forever
+  # clear_after: 60         # seconds an alert must be gone before the state forgets it (default: 60)
+  #                         # absorbs a single failed poll, which would otherwise re-fire everything
+  # state_file: /var/lib/promlens/alerts.state   # default, overridable with $ALERT_STATE_FILE
+  #
+  # Alert names that trigger the overlay. fnmatch patterns (* ? [abc]),
+  # case-insensitive. Default: all blackbox probe failures + instance down.
+  # Both sources are matched: Prometheus alertname, and the alerts ProMLens
+  # derives itself (InstanceDown, BlackboxProbeFailed, SystemdUnitFailed,
+  # CpuHigh, MemoryHigh, DiskHigh, NetworkHigh, NodeIssue).
+  alerts:
+    - "*blackbox*"
+    - "*probefailed*"
+    - "instancedown"
+  # severities: [critical]  # optional extra filter on the severity label (default: all)

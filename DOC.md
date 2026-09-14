@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.23.1**
+Version: **0.24.0**
 
 ---
 
@@ -23,6 +23,8 @@ ProMLens is a FastAPI + Vis.js web application. It combines a static topology de
 | Threshold colors | Frontend | Computed from the metrics already fetched for the graph |
 | ProMLens alert evaluation (`local_alerts.py`) | Backend (background task) | Same thresholds as the graph, but must keep evaluating when no browser is open |
 | Alert webhook notifications (`notifier.py`) | Backend (background task) | Must keep firing when no browser is open |
+| Alert overlay state (`POST /api/alert-state`) | Backend (JSON state file) | Every open browser must agree on which alert is new, and a page reload must not replay an alert firing for hours |
+| Alert overlay rendering and siren | Frontend | DOM overlay and WebAudio, must run in the browser |
 
 ---
 
@@ -49,6 +51,7 @@ File layout after installation:
 | `/etc/promlens/promlens.yaml` | Prometheus connection config |
 | `/etc/promlens/topology.yaml` | Network topology declaration |
 | `/var/lib/promlens/layout.json` | Saved node positions (written at runtime) |
+| `/var/lib/promlens/alerts.state` | Alert overlay first-seen dates (written at runtime) |
 | `/etc/default/promlens` | Environment variable overrides |
 
 ### Container
@@ -533,6 +536,76 @@ webhooks:
 
 Node colors in the UI are unaffected; only the notifications are suppressed.
 
+### alert_overlay section
+
+Displays a full-screen red overlay in the middle of the screen when a **new** alert appears, with an optional ship-horn siren. Meant for a wall display: a new incident is visible and audible from across the room.
+
+```yaml
+alert_overlay:
+  enabled: true             # default true when the section is present
+  sound: true               # ship horn siren (default: true)
+  duration: 10              # seconds on screen per alert (default: 10, clamped to 2-300)
+  volume: 0.7               # 0.0 to 1.0 (default: 0.7)
+  blasts: 2                 # ship horn blasts per alert, ~2.6 s each (default: 2, clamped 1-10)
+  max_queue: 5              # overlays chained for one burst (default: 5, clamped 1-50)
+  clear_after: 60           # seconds an alert must be gone before the state forgets it
+                            # (default: 60, clamped 0-86400)
+  state_file: /var/lib/promlens/alerts.state   # default; ALERT_STATE_FILE overrides it
+  alerts:                   # fnmatch patterns (* ? [abc]) on the alert name, case-insensitive
+    - "*blackbox*"          # default list = all blackbox probe failures + instance down
+    - "*probefailed*"
+    - "instancedown"
+  severities: [critical]    # optional extra filter on the severity label (default: all)
+```
+
+Remove the section entirely or set `enabled: false` to disable, as for `blackbox`, `libvirt` and `frigate`.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `true` when the section exists | Master switch |
+| `sound` | bool | `true` | Play the ship-horn siren with the overlay |
+| `duration` | int | `10` | Seconds each overlay stays on screen, clamped to `2`-`300` |
+| `volume` | float | `0.7` | Siren volume, from `0.0` to `1.0` |
+| `blasts` | int | `2` | Ship horn blasts per alert (about 2.6 s each), clamped to `1`-`10` |
+| `max_queue` | int | `5` | Overlays chained for one burst, clamped to `1`-`50` |
+| `clear_after` | int | `60` | Seconds an alert must be gone before its state entry is dropped, clamped to `0`-`86400` |
+| `state_file` | path | `/var/lib/promlens/alerts.state` | JSON file holding the first-seen date of each alert. Overridden by the `ALERT_STATE_FILE` environment variable. Stays server-side and is never returned by `GET /api/config` |
+| `alerts` | list | blackbox probe failures + instance down | fnmatch patterns matched against the alert name, case-insensitive |
+| `severities` | list | all | Extra filter on the `severity` label |
+
+#### Matched alerts
+
+Two alert sources are matched against `alerts`:
+
+1. **Prometheus alerts** — the `alertname` label, `state=firing` only.
+2. **ProMLens alerts** — the ones listed in the issues panel, computed by ProMLens itself.
+
+ProMLens alert names: `InstanceDown`, `BlackboxProbeFailed`, `SystemdUnitFailed`, `CpuHigh`, `MemoryHigh`, `DiskHigh`, `NetworkHigh`, `NodeIssue`. When a node has several problems at once, the most significant one names the alert, in that priority order: down first, then probes, then failed units, then cpu/mem/disk.
+
+Severity comes from the `severity` label for Prometheus alerts. ProMLens alerts map their color: red -> `critical`, orange -> `warning`.
+
+#### First-seen state
+
+"New" is decided **server side**, so every open browser agrees and reloading the page does not replay an alert that has been firing for hours.
+
+1. On each refresh cycle, the UI posts the keys of the alerts eligible for the overlay to [`POST /api/alert-state`](#post-apialert-state); the server answers when each of them was first seen.
+2. The first-seen dates are stored as JSON in `state_file`, so they also survive a service restart.
+3. The first time the state file is created, the alerts already firing are adopted silently: no overlay burst on the first run, exactly like the webhook notifier arming itself.
+4. When an alert disappears, its entry is cleared after `clear_after` seconds. If the same alert fires again later, the overlay shows up again. The delay absorbs a single failed Prometheus poll, which would otherwise resolve then re-fire every alert.
+
+Detection happens on the UI refresh cycle, so an overlay can appear up to one refresh interval after the alert fires.
+
+The overlay display, queue, dismissal and siren are described in [Alert overlay](#alert-overlay) (section 9).
+
+#### Deployment
+
+| Target | State file | Notes |
+|---|---|---|
+| Debian package | `/var/lib/promlens/alerts.state` | The directory is already owned by the `promlens` user and listed in `ReadWritePaths` of the systemd unit. `ALERT_STATE_FILE=/var/lib/promlens/alerts.state` is set in `/etc/default/promlens` |
+| Container | `/data/alerts.state` | Inside the existing `/data` volume, via `ALERT_STATE_FILE` |
+
+If the state path is not writable, ProMLens logs a warning and keeps the state in memory only. The overlay still works, but the first-seen dates are lost on restart.
+
 ---
 
 ## 4. Authentication modes
@@ -818,12 +891,25 @@ curl -s http://127.0.0.1:8001/api/config | jq .
   },
   "libvirt": null,
   "frigate": {"camera_url": "https://frigate.example.com"},
+  "alert_overlay": {
+    "enabled": true,
+    "sound": true,
+    "duration": 10,
+    "volume": 0.7,
+    "blasts": 2,
+    "max_queue": 5,
+    "clear_after": 60,
+    "alerts": ["*blackbox*", "*probefailed*", "instancedown"],
+    "severities": []
+  },
   "app_auth_mode": "none",
   "app_auth_user": null
 }
 ```
 
 When a section (`blackbox`, `libvirt`, `frigate`) is absent from `promlens.yaml`, it returns `null`. When present but empty, it returns `{}`. The frontend treats `null` as disabled and anything else as enabled (unless `enabled: false` is set).
+
+`alert_overlay` returns the resolved section (config merged with the defaults, values already clamped) minus `state_file`, which stays server-side. It returns `null` when the overlay is disabled.
 
 When the `blackbox` section is present, `blackbox.modules` is always returned with the four roles, resolved from the config merged with the defaults. A role configured with an empty list is returned as an empty list, and the frontend skips its query.
 
@@ -928,6 +1014,49 @@ Returns an empty array `[]` if Prometheus is unreachable or returns an error. Do
 curl -s http://127.0.0.1:8001/api/alerts | jq '[.[] | select(.state=="firing")]'
 ```
 
+### POST /api/alert-state
+
+Returns the date each alert was first seen by the server. The UI posts the keys of the alerts eligible for the [alert overlay](#alert_overlay-section) on every refresh cycle, and treats as new the keys whose `first_seen` is recent.
+
+An alert key is an opaque string built by the UI to identify one alert on one node.
+
+**Request body:**
+
+```json
+{"keys": ["<alert key>", "<alert key>"]}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `keys` | list | Alert keys, max 2000 entries of 512 characters each |
+
+**Response:**
+
+```json
+{
+  "enabled": true,
+  "first_seen": {
+    "<alert key>": 1788470740.451429,
+    "<alert key>": 1788470912.883104
+  },
+  "now": 1788470930.117742
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `enabled` | bool | `false` when the overlay is disabled; `first_seen` is then empty |
+| `first_seen` | map | Alert key -> epoch seconds (float) of the first time the server saw it |
+| `now` | float | Server time in epoch seconds, so the browser clock is never used |
+
+A key the server has never seen is recorded on the spot; a key absent from the request is dropped after `clear_after` seconds.
+
+```bash
+curl -s -X POST http://127.0.0.1:8001/api/alert-state \
+  -H "Content-Type: application/json" \
+  -d '{"keys":["<alert key>"]}' | jq .
+```
+
 ### GET /login
 
 Returns the login page HTML. Only meaningful when `app_auth.mode: basic`.
@@ -1001,6 +1130,7 @@ Set in `/etc/default/promlens` for the Debian package, or passed to the containe
 | `CONFIG_FILE` | `/etc/promlens/promlens.yaml` | Path to Prometheus config file |
 | `TOPOLOGY_FILE` | `/etc/promlens/topology.yaml` | Path to topology file |
 | `LAYOUT_FILE` | `/var/lib/promlens/layout.json` | Path to layout persistence file |
+| `ALERT_STATE_FILE` | `/var/lib/promlens/alerts.state` | Path to the alert overlay state file. Overrides the default of `alert_overlay.state_file`. The container image sets `/data/alerts.state` |
 | `BIND_HOST` | `127.0.0.1` | Bind address |
 | `BIND_PORT` | `8001` | Bind port |
 | `LOG_LEVEL` | `INFO` | Python logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
@@ -1040,6 +1170,8 @@ Every refresh cycle runs these in parallel with `Promise.all`:
 Queries 15-20 are skipped (Promise resolves immediately) when their integration is disabled. Queries 15-18 are also skipped when their role has an empty module list in [blackbox.modules](#blackboxmodules). Query 21 always runs; it returns an empty array on error so a Prometheus alertmanager outage does not block the graph.
 
 `GET /api/mtime` is not part of this batch: when [auto_reload](#auto_reload-option) is enabled it runs on its own 5 second timer and only triggers a full `fetchAll()` when a config file has changed.
+
+`POST /api/alert-state` is not part of this batch either: it runs at the end of the cycle, once the alerts are known, and only when the [alert overlay](#alert_overlay-section) is enabled.
 
 ### buildGraph phases
 
@@ -1164,6 +1296,29 @@ To return to the graph, click the **←** button in the header or press `Escape`
   - The full `summary` annotation (if present).
   - All remaining labels as `key=value` chips (excluding `alertname` and `severity`, shown in the card header).
   - All remaining annotations as `key=value` chips (excluding `summary`, shown above).
+
+### Alert overlay
+
+A full-screen red overlay shown in the middle of the screen when a new alert appears. Configured by the [alert_overlay](#alert_overlay-section) section, which also defines which alerts are eligible and how "new" is decided.
+
+**Queue.** Overlays are displayed one after the other, `duration` seconds each. On a burst larger than `max_queue`, the extras are counted on the last overlay (`+N more alerts not shown`) instead of holding the screen hostage.
+
+**Dismiss:**
+
+| Action | Effect |
+|---|---|
+| Click anywhere on the overlay | Closes it and skips the rest of the queue |
+| `Escape` | Same |
+| MUTE button | Stops the siren, keeps the overlay |
+| Nothing | The overlay closes on its own after `duration` seconds |
+
+**Siren.** The ship horn is synthesized in the browser with the WebAudio API: no audio file is shipped or downloaded. It plays `blasts` blasts of about 2.6 s each at `volume`, and is skipped entirely when `sound: false`.
+
+Browsers block audio until the user has interacted with the page at least once. Until then, the overlay displays:
+
+```
+sound blocked by the browser - click the page once to allow it
+```
 
 ### Link color logic
 
@@ -1463,6 +1618,14 @@ Cameras `front-door` and `backyard` appear as nodes attached to `sw-cam`. Clicki
 - **Notified alerts and displayed alerts are two different feeds**: the graph, the alerts panel and the alerts page show the Prometheus alerts of `/api/v1/alerts`; the webhooks notify the ProMLens alerts computed from the thresholds. A Prometheus alerting rule never triggers a webhook, and a ProMLens alert never appears in the alerts panel.
 
 - **Webhook delivery is best effort**: A failed POST is logged and dropped, with no retry and no queue. Alerts firing and resolving within a single `interval` window are never notified.
+
+- **The overlay siren needs one user interaction**: browsers block audio on a page nobody has clicked yet. A wall display rebooted without anyone touching it stays silent, and the overlay says so ("sound blocked by the browser"). Click the page once after opening it.
+
+- **The overlay lags by up to one refresh interval**: detection runs on the UI refresh cycle. With `refresh: 30`, an alert can fire up to 30 seconds before its overlay appears. It never appears at all if no browser is open — unlike the webhooks, which are server-side.
+
+- **A non-writable state file silently degrades to memory**: if `state_file` cannot be written, ProMLens logs a warning and keeps the first-seen dates in memory. The overlay keeps working, but a restart forgets every date and the alerts still firing are adopted silently again.
+
+- **clear_after shorter than a Prometheus outage replays overlays**: an alert missing from the poll for more than `clear_after` seconds is forgotten, so it is new again when it comes back. Keep `clear_after` above the duration of a poll hiccup.
 
 - **YAML reload is parse-only**: `POST /api/reload` validates syntax with `yaml.safe_load` but does not validate field values or types. An invalid `url` field passes reload validation but causes HTTP 503 on the next query.
 

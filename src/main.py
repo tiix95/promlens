@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, RootModel, ValidationError, field_validator
 from typing import Optional, Union
 
+from alert_overlay import OverlayConfig, get_state, parse_overlay_config
 from auth import LOGIN_HTML, load_app_auth_config, make_session_token, verify_password, verify_session_token
 from local_alerts import parse_thresholds
 from notifier import run_notifier
@@ -457,6 +458,7 @@ async def get_config(request: Request):
         # Same parsing as the notifier: the graph colors and the ProMLens
         # alerts must never disagree on a threshold.
         thresholds = parse_thresholds(data)
+        overlay = parse_overlay_config(data)
         return {
             "url": url, "configured": bool(url), "auth_type": auth_type,
             "instance_label": instance_label, "parent_label": parent_label,
@@ -469,9 +471,51 @@ async def get_config(request: Request):
             "thresholds": thresholds.generic,
             "thresholds_by_node": thresholds.by_node,
             "threshold_colors": bool(data.get("threshold_colors", True)),
+            "alert_overlay": overlay.as_dict() if overlay.enabled else None,
         }
     except Exception:
         return {"url": "", "configured": False, "auth_type": "none", "app_auth_mode": "none", "app_auth_user": None}
+
+
+class AlertStateRequest(BaseModel):
+    """Keys of the alerts currently eligible for the overlay, sent by the UI."""
+    keys: list[str] = Field(default_factory=list, max_length=2000)
+
+    @field_validator("keys")
+    @classmethod
+    def keys_must_be_sane(cls, v: list[str]) -> list[str]:
+        return [k for k in v if k and len(k) <= 512]
+
+
+# One writer at a time: several browsers post on their own refresh cycle.
+_alert_state_lock = asyncio.Lock()
+
+
+def _load_overlay_config() -> OverlayConfig:
+    """Re-read the alert_overlay section so config changes apply without a restart."""
+    if not CONFIG_FILE.exists():
+        return parse_overlay_config({})
+    try:
+        return parse_overlay_config(yaml.safe_load(CONFIG_FILE.read_text()) or {})
+    except Exception as exc:  # noqa: BLE001 - a broken config must not break the UI
+        logger.warning("alert_overlay config unreadable: %s", exc)
+        return parse_overlay_config({})
+
+
+@app.post("/api/alert-state")
+async def post_alert_state(req: AlertStateRequest):
+    """Register the firing alerts and tell the UI when each was first seen.
+
+    The UI compares first_seen with `now` to decide what is new, so every
+    browser agrees and a reload does not replay an old alert.
+    """
+    config = _load_overlay_config()
+    if not config.enabled:
+        return {"enabled": False, "first_seen": {}, "now": time.time()}
+
+    async with _alert_state_lock:
+        first_seen = get_state(config.state_file).sync(req.keys, config.clear_after)
+    return {"enabled": True, "first_seen": first_seen, "now": time.time()}
 
 
 def _flatten_nodes(nodes: list, parent_id: str | None = None) -> list:

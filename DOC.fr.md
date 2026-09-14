@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.23.1**
+Version : **0.24.0**
 
 ---
 
@@ -23,6 +23,8 @@ ProMLens est une application web FastAPI + Vis.js. Elle combine une déclaration
 | Couleurs de seuils | Frontend | Calculées à partir des métriques déjà récupérées pour le graphe |
 | Évaluation des alertes ProMLens (`local_alerts.py`) | Backend (tâche de fond) | Mêmes seuils que le graphe, mais doit continuer à évaluer quand aucun navigateur n'est ouvert |
 | Notifications webhook d'alerte (`notifier.py`) | Backend (tâche de fond) | Doit continuer à émettre quand aucun navigateur n'est ouvert |
+| État de la surcouche d'alerte (`POST /api/alert-state`) | Backend (fichier d'état JSON) | Tous les navigateurs ouverts doivent s'accorder sur ce qui est nouveau, et un rechargement de page ne doit pas rejouer une alerte active depuis des heures |
+| Affichage de la surcouche et sirène | Frontend | Surcouche DOM et WebAudio, doit s'exécuter dans le navigateur |
 
 ---
 
@@ -49,6 +51,7 @@ Arborescence après installation :
 | `/etc/promlens/promlens.yaml` | Configuration de connexion à Prometheus |
 | `/etc/promlens/topology.yaml` | Déclaration de la topologie réseau |
 | `/var/lib/promlens/layout.json` | Positions de noeuds sauvegardées (écrit à l'exécution) |
+| `/var/lib/promlens/alerts.state` | Dates de première vue des alertes pour la surcouche (écrit à l'exécution) |
 | `/etc/default/promlens` | Surcharges par variables d'environnement |
 
 ### Conteneur
@@ -533,6 +536,76 @@ webhooks:
 
 Les couleurs des noeuds dans l'interface ne sont pas affectées ; seules les notifications sont supprimées.
 
+### Section alert_overlay
+
+Affiche une surcouche rouge plein écran au milieu de l'écran à l'apparition d'une **nouvelle** alerte, avec une sirène de corne de brume optionnelle. Prévu pour un écran mural : un nouvel incident devient visible et audible depuis l'autre bout de la pièce.
+
+```yaml
+alert_overlay:
+  enabled: true             # true par defaut quand la section est presente
+  sound: true               # sirene de corne de brume (par defaut: true)
+  duration: 10              # secondes d'affichage par alerte (par defaut: 10, borne a 2-300)
+  volume: 0.7               # 0.0 a 1.0 (par defaut: 0.7)
+  blasts: 2                 # coups de corne par alerte, ~2.6 s chacun (par defaut: 2, borne a 1-10)
+  max_queue: 5              # surcouches enchainees pour une rafale (par defaut: 5, borne a 1-50)
+  clear_after: 60           # secondes pendant lesquelles une alerte disparue est conservee
+                            # dans l'etat (par defaut: 60, borne a 0-86400)
+  state_file: /var/lib/promlens/alerts.state   # defaut; ALERT_STATE_FILE le remplace
+  alerts:                   # motifs fnmatch (* ? [abc]) sur le nom de l'alerte, insensibles a la casse
+    - "*blackbox*"          # liste par defaut = echecs de sonde blackbox + instance down
+    - "*probefailed*"
+    - "instancedown"
+  severities: [critical]    # filtre supplementaire sur le label severity (par defaut: toutes)
+```
+
+Supprimez la section entièrement ou mettez `enabled: false` pour désactiver, comme pour `blackbox`, `libvirt` et `frigate`.
+
+| Champ | Type | Défaut | Description |
+|---|---|---|---|
+| `enabled` | bool | `true` quand la section existe | Interrupteur principal |
+| `sound` | bool | `true` | Joue la sirène de corne de brume avec la surcouche |
+| `duration` | int | `10` | Secondes d'affichage de chaque surcouche, borné à `2`-`300` |
+| `volume` | float | `0.7` | Volume de la sirène, de `0.0` à `1.0` |
+| `blasts` | int | `2` | Coups de corne par alerte (environ 2,6 s chacun), borné à `1`-`10` |
+| `max_queue` | int | `5` | Surcouches enchaînées pour une rafale, borné à `1`-`50` |
+| `clear_after` | int | `60` | Secondes pendant lesquelles une alerte disparue est conservée avant que son entrée soit supprimée, borné à `0`-`86400` |
+| `state_file` | path | `/var/lib/promlens/alerts.state` | Fichier JSON contenant la date de première vue de chaque alerte. Remplacé par la variable d'environnement `ALERT_STATE_FILE`. Reste côté serveur et n'est jamais renvoyé par `GET /api/config` |
+| `alerts` | list | échecs de sonde blackbox + instance down | Motifs fnmatch comparés au nom de l'alerte, insensibles à la casse |
+| `severities` | list | toutes | Filtre supplémentaire sur le label `severity` |
+
+#### Alertes prises en compte
+
+Deux sources d'alertes sont comparées à `alerts` :
+
+1. **Les alertes Prometheus** — le label `alertname`, avec `state=firing` uniquement.
+2. **Les alertes ProMLens** — celles du panneau des issues, calculées par ProMLens lui-même.
+
+Noms des alertes ProMLens : `InstanceDown`, `BlackboxProbeFailed`, `SystemdUnitFailed`, `CpuHigh`, `MemoryHigh`, `DiskHigh`, `NetworkHigh`, `NodeIssue`. Quand un noeud cumule plusieurs problèmes, c'est le plus significatif qui nomme l'alerte, dans cet ordre de priorité : d'abord down, puis les sondes, puis les units en échec, puis cpu/mem/disque.
+
+La sévérité vient du label `severity` pour les alertes Prometheus. Les alertes ProMLens traduisent leur couleur : rouge -> `critical`, orange -> `warning`.
+
+#### État de première vue
+
+La nouveauté est décidée **côté serveur** : tous les navigateurs ouverts sont donc d'accord, et recharger la page ne rejoue pas une alerte active depuis des heures.
+
+1. À chaque cycle de rafraîchissement, l'interface envoie à [`POST /api/alert-state`](#post-apialert-state) les clés des alertes éligibles à la surcouche ; le serveur répond quand chacune a été vue pour la première fois.
+2. Les dates de première vue sont stockées en JSON dans `state_file` : elles survivent donc aussi à un redémarrage du service.
+3. À la création initiale du fichier d'état, les alertes déjà actives sont adoptées en silence : aucune rafale de surcouches au premier lancement, exactement comme le notifier webhook qui s'amorce.
+4. Quand une alerte disparaît, son entrée est supprimée après `clear_after` secondes. Si la même alerte se redéclenche plus tard, la surcouche réapparaît. Ce délai absorbe un sondage Prometheus raté, qui sinon résoudrait puis redéclencherait toutes les alertes.
+
+La détection se fait sur le cycle de rafraîchissement de l'interface : une surcouche peut donc apparaître jusqu'à un intervalle de rafraîchissement après le déclenchement de l'alerte.
+
+L'affichage, la file d'attente, la fermeture et la sirène sont décrits dans [Surcouche d'alerte](#surcouche-dalerte) (section 9).
+
+#### Déploiement
+
+| Cible | Fichier d'état | Notes |
+|---|---|---|
+| Paquet Debian | `/var/lib/promlens/alerts.state` | Le répertoire appartient déjà à l'utilisateur `promlens` et figure dans `ReadWritePaths` de l'unité systemd. `ALERT_STATE_FILE=/var/lib/promlens/alerts.state` est défini dans `/etc/default/promlens` |
+| Conteneur | `/data/alerts.state` | Dans le volume `/data` existant, via `ALERT_STATE_FILE` |
+
+Si le chemin d'état n'est pas inscriptible, ProMLens journalise un avertissement et conserve l'état en mémoire uniquement. La surcouche fonctionne toujours, mais les dates de première vue sont perdues au redémarrage.
+
 ---
 
 ## 4. Modes d'authentification
@@ -818,12 +891,25 @@ curl -s http://127.0.0.1:8001/api/config | jq .
   },
   "libvirt": null,
   "frigate": {"camera_url": "https://frigate.example.com"},
+  "alert_overlay": {
+    "enabled": true,
+    "sound": true,
+    "duration": 10,
+    "volume": 0.7,
+    "blasts": 2,
+    "max_queue": 5,
+    "clear_after": 60,
+    "alerts": ["*blackbox*", "*probefailed*", "instancedown"],
+    "severities": []
+  },
   "app_auth_mode": "none",
   "app_auth_user": null
 }
 ```
 
 Quand une section (`blackbox`, `libvirt`, `frigate`) est absente de `promlens.yaml`, elle renvoie `null`. Quand elle est présente mais vide, elle renvoie `{}`. Le frontend traite `null` comme désactivé et toute autre valeur comme activée (sauf si `enabled: false` est défini).
+
+`alert_overlay` renvoie la section résolue (config fusionnée avec les défauts, valeurs déjà bornées) privée de `state_file`, qui reste côté serveur. Elle renvoie `null` quand la surcouche est désactivée.
 
 Quand la section `blackbox` est présente, `blackbox.modules` est toujours renvoyée avec les quatre rôles, résolus depuis la config fusionnée avec les défauts. Un rôle configuré avec une liste vide est renvoyé comme liste vide, et le frontend ignore sa requête.
 
@@ -928,6 +1014,49 @@ Renvoie un tableau vide `[]` si Prometheus est injoignable ou renvoie une erreur
 curl -s http://127.0.0.1:8001/api/alerts | jq '[.[] | select(.state=="firing")]'
 ```
 
+### POST /api/alert-state
+
+Renvoie la date à laquelle chaque alerte a été vue pour la première fois par le serveur. À chaque cycle de rafraîchissement, l'interface envoie les clés des alertes éligibles à la [surcouche d'alerte](#section-alert_overlay) et considère comme nouvelles celles dont le `first_seen` est récent.
+
+Une clé d'alerte est une chaîne opaque construite par l'interface pour identifier une alerte sur un noeud.
+
+**Corps de la requête :**
+
+```json
+{"keys": ["<alert key>", "<alert key>"]}
+```
+
+| Champ | Type | Description |
+|---|---|---|
+| `keys` | list | Clés d'alerte, 2000 entrées maximum de 512 caractères chacune |
+
+**Réponse :**
+
+```json
+{
+  "enabled": true,
+  "first_seen": {
+    "<alert key>": 1788470740.451429,
+    "<alert key>": 1788470912.883104
+  },
+  "now": 1788470930.117742
+}
+```
+
+| Champ | Type | Description |
+|---|---|---|
+| `enabled` | bool | `false` quand la surcouche est désactivée ; `first_seen` est alors vide |
+| `first_seen` | map | Clé d'alerte -> secondes epoch (flottant) de la première vue par le serveur |
+| `now` | flottant | Heure du serveur en secondes epoch, pour ne jamais dépendre de l'horloge du navigateur |
+
+Une clé que le serveur n'a jamais vue est enregistrée immédiatement ; une clé absente de la requête est supprimée après `clear_after` secondes.
+
+```bash
+curl -s -X POST http://127.0.0.1:8001/api/alert-state \
+  -H "Content-Type: application/json" \
+  -d '{"keys":["<alert key>"]}' | jq .
+```
+
 ### GET /login
 
 Renvoie le HTML de la page de connexion. N'a de sens que lorsque `app_auth.mode: basic`.
@@ -1001,6 +1130,7 @@ connect-src 'self' https://prometheus.example.com;
 | `CONFIG_FILE` | `/etc/promlens/promlens.yaml` | Chemin du fichier de configuration Prometheus |
 | `TOPOLOGY_FILE` | `/etc/promlens/topology.yaml` | Chemin du fichier de topologie |
 | `LAYOUT_FILE` | `/var/lib/promlens/layout.json` | Chemin du fichier de persistance du layout |
+| `ALERT_STATE_FILE` | `/var/lib/promlens/alerts.state` | Chemin du fichier d'état de la surcouche d'alerte. Remplace le défaut de `alert_overlay.state_file`. L'image conteneur utilise `/data/alerts.state` |
 | `BIND_HOST` | `127.0.0.1` | Adresse d'écoute |
 | `BIND_PORT` | `8001` | Port d'écoute |
 | `LOG_LEVEL` | `INFO` | Niveau de journalisation Python (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
@@ -1040,6 +1170,8 @@ Chaque cycle de rafraîchissement exécute celles-ci en parallèle avec `Promise
 Les requêtes 15 à 20 sont ignorées (la Promise se résout immédiatement) quand leur intégration est désactivée. Les requêtes 15 à 18 sont également ignorées quand leur rôle a une liste de modules vide dans [blackbox.modules](#blackboxmodules). La requête 21 s'exécute toujours ; elle renvoie un tableau vide en cas d'erreur, de sorte qu'une panne de l'alertmanager Prometheus ne bloque pas le graphe.
 
 `GET /api/mtime` ne fait pas partie de ce lot : quand [auto_reload](#option-auto_reload) est active, il tourne sur son propre timer de 5 secondes et ne declenche un `fetchAll()` complet que si un fichier de configuration a change.
+
+`POST /api/alert-state` ne fait pas partie de ce lot non plus : il part en fin de cycle, une fois les alertes connues, et uniquement quand la [surcouche d'alerte](#section-alert_overlay) est activée.
 
 ### Phases de buildGraph
 
@@ -1164,6 +1296,29 @@ Pour revenir au graphe, cliquez sur le bouton **←** de l'en-tête ou appuyez s
   - L'annotation `summary` complète (si présente).
   - Tous les labels restants sous forme de pastilles `cle=valeur` (hors `alertname` et `severity`, affichés dans l'en-tête de la carte).
   - Toutes les annotations restantes sous forme de pastilles `cle=valeur` (hors `summary`, affichée au-dessus).
+
+### Surcouche d'alerte
+
+Une surcouche rouge plein écran affichée au milieu de l'écran à l'apparition d'une nouvelle alerte. Configurée par la section [alert_overlay](#section-alert_overlay), qui définit aussi les alertes éligibles et la façon dont la nouveauté est décidée.
+
+**File d'attente.** Les surcouches sont affichées l'une après l'autre, `duration` secondes chacune. Sur une rafale plus grande que `max_queue`, les surnuméraires sont comptées sur la dernière surcouche (`+N more alerts not shown`) au lieu de monopoliser l'écran.
+
+**Fermeture :**
+
+| Action | Effet |
+|---|---|
+| Clic n'importe où sur la surcouche | La ferme et saute le reste de la file |
+| `Escape` | Idem |
+| Bouton MUTE | Coupe la sirène, garde la surcouche |
+| Rien | La surcouche se ferme d'elle-même après `duration` secondes |
+
+**Sirène.** La corne de brume est synthétisée dans le navigateur avec l'API WebAudio : aucun fichier audio n'est livré ni téléchargé. Elle joue `blasts` coups d'environ 2,6 s chacun au volume `volume`, et est totalement ignorée avec `sound: false`.
+
+Les navigateurs bloquent le son tant que l'utilisateur n'a pas interagi au moins une fois avec la page. En attendant, la surcouche affiche :
+
+```
+sound blocked by the browser - click the page once to allow it
+```
 
 ### Logique de couleur des liens
 
@@ -1463,6 +1618,14 @@ Les caméras `front-door` et `backyard` apparaissent comme des noeuds rattachés
 - **Les alertes notifiées et les alertes affichées sont deux flux différents** : le graphe, le panneau d'alertes et la page des alertes affichent les alertes Prometheus de `/api/v1/alerts` ; les webhooks notifient les alertes ProMLens calculées à partir des seuils. Une règle d'alerte Prometheus ne déclenche jamais de webhook, et une alerte ProMLens n'apparaît jamais dans le panneau d'alertes.
 
 - **La livraison des webhooks est en best effort** : un POST en échec est journalisé puis abandonné, sans réessai ni file d'attente. Les alertes qui se déclenchent et se résolvent dans une même fenêtre d'`interval` ne sont jamais notifiées.
+
+- **La sirène de la surcouche exige une interaction utilisateur** : les navigateurs bloquent le son sur une page que personne n'a cliquée. Un écran mural redémarré sans que personne n'y touche reste muet, et la surcouche le signale ("sound blocked by the browser"). Cliquez une fois sur la page après l'avoir ouverte.
+
+- **La surcouche accuse jusqu'à un intervalle de rafraîchissement de retard** : la détection se fait sur le cycle de rafraîchissement de l'interface. Avec `refresh: 30`, une alerte peut se déclencher jusqu'à 30 secondes avant l'apparition de sa surcouche. Elle n'apparaît pas du tout si aucun navigateur n'est ouvert — contrairement aux webhooks, qui sont côté serveur.
+
+- **Un fichier d'état non inscriptible dégrade silencieusement vers la mémoire** : si `state_file` ne peut pas être écrit, ProMLens journalise un avertissement et conserve les dates de première vue en mémoire. La surcouche continue de fonctionner, mais un redémarrage oublie toutes les dates et les alertes encore actives sont de nouveau adoptées en silence.
+
+- **Un clear_after plus court qu'une panne Prometheus rejoue les surcouches** : une alerte absente du sondage pendant plus de `clear_after` secondes est oubliée, elle redevient donc nouvelle à son retour. Gardez `clear_after` au-dessus de la durée d'un hoquet de sondage.
 
 - **Le rechargement YAML ne fait qu'analyser la syntaxe** : `POST /api/reload` valide la syntaxe avec `yaml.safe_load` mais ne valide ni les valeurs ni les types des champs. Un champ `url` invalide passe la validation de rechargement mais provoque un HTTP 503 à la requête suivante.
 

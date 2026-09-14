@@ -3,4 +3,5 @@ BIND_PORT=8001
 CONFIG_FILE=/etc/promlens/promlens.yaml
 TOPOLOGY_FILE=/etc/promlens/topology.yaml
 LAYOUT_FILE=/var/lib/promlens/layout.json
+ALERT_STATE_FILE=/var/lib/promlens/alerts.state
 SESSION_SECURE_COOKIE=1

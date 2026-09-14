@@ -4,7 +4,7 @@
 
 Visualiseur de topologie reseau qui superpose les metriques Prometheus temps reel sur un graphe Vis.js interactif.
 
-Version : **0.21.0**
+Version : **0.24.0**
 
 ## Captures d'ecran
 
@@ -179,6 +179,22 @@ webhooks:                                 # supprimer la section ou mettre enabl
       module: promlens
       headers:
         Authorization: "Bearer ${NOTIFY_TOKEN}"   # $VAR / ${VAR} sont expanses
+
+alert_overlay:                            # supprimer la section ou mettre enabled: false pour desactiver
+  enabled: true
+  sound: true                             # sirene de corne de brume (defaut: true)
+  duration: 10                            # secondes d'affichage par alerte (defaut: 10, borne a 2-300)
+  volume: 0.7                             # 0.0 a 1.0 (defaut: 0.7)
+  blasts: 2                               # coups de corne par alerte, ~2.6 s chacun (defaut: 2, borne a 1-10)
+  max_queue: 5                            # surcouches enchainees pour une rafale (defaut: 5, borne a 1-50)
+  clear_after: 60                         # secondes pendant lesquelles une alerte disparue est conservee
+                                          # avant d'etre oubliee (defaut: 60, borne a 0-86400)
+  state_file: /var/lib/promlens/alerts.state  # dates de premiere vue (env: ALERT_STATE_FILE)
+  alerts:                                 # motifs fnmatch sur le nom de l'alerte, insensibles a la casse
+    - "*blackbox*"                        # liste par defaut : echecs de sonde blackbox + instance down
+    - "*probefailed*"
+    - "instancedown"
+  severities: [critical]                  # filtre supplementaire sur le label severity (defaut: toutes)
 ```
 
 ## topology.yaml -- resume des sections
@@ -204,6 +220,7 @@ Reference complete et exemples : voir [DOC.fr.md](DOC.fr.md)
 | `GET` | `/api/layout` | Positions de noeuds et etats d'affichage sauvegardes |
 | `POST` | `/api/layout` | Sauvegarde les positions de noeuds et les etats d'affichage |
 | `GET` | `/api/mtime` | Dates de modification des deux fichiers de configuration |
+| `POST` | `/api/alert-state` | Date de premiere vue de chaque alerte, pour la surcouche d'alerte |
 | `POST` | `/api/reload` | Valide et recharge les deux fichiers de configuration |
 | `GET` | `/login` | Page de login (mode basic uniquement) |
 | `POST` | `/api/auth/login` | Authentifie et renvoie un cookie de session |
@@ -234,6 +251,7 @@ Reference complete et exemples : voir [DOC.fr.md](DOC.fr.md)
 - Raccourcis clavier -- combinaisons `Ctrl`/`Cmd` pour la recherche, la sauvegarde du layout, le mode selection, l'ajustement de la vue et le rafraichissement ; `Ctrl+H` les liste dans une fenetre d'aide
 - Layout persistant -- positions et etats d'affichage sauvegardes cote serveur
 - Webhooks d'alerte -- notifications cote serveur pour les alertes calculees par ProMLens lui-meme (seuils, noeud down, unites systemd en echec), aucune regle d'alerting Prometheus requise
+- Surcouche d'alerte -- surcouche rouge plein ecran avec une sirene de corne de brume optionnelle a l'apparition d'une nouvelle alerte ; la nouveaute est decidee cote serveur, donc tous les navigateurs ouverts sont d'accord et recharger la page ne rejoue jamais une vieille alerte
 - Rechargement de configuration -- le bouton RELOAD valide et recharge a chaud les deux fichiers YAML
 - Rechargement automatique -- avec `auto_reload: true`, modifier `promlens.yaml` ou `topology.yaml` reconstruit le graphe en moins de 5 secondes, sans attendre l'intervalle de rafraichissement
 - Securite -- rate limiting, protection CSRF, entetes CSP
