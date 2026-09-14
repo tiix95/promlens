@@ -3462,8 +3462,9 @@ function showPromAlerts(alerts) {
 let overlayCfg     = null;       // alert_overlay section of /api/config, null when disabled
 let overlayQueue   = [];         // alerts waiting for their turn on screen
 const overlayShown = new Set();  // keys already displayed, dropped when the alert resolves
-let overlayTimer   = null;
-let overlayMuted   = false;
+let overlayTimer    = null;
+let overlayDeadline = 0;         // epoch ms the overlay on screen closes at
+let overlayMuted    = false;
 
 const BLAST_SECONDS = 2.6;       // one ship horn blast, tail included
 // Envelope peak keeping the summed partials under 0 dBFS at volume 1.0.
@@ -3639,6 +3640,18 @@ async function syncAlertOverlay(promAlerts, issues) {
 }
 
 // -- Display --------------------------------------------------
+// Countdown bar: set to `fromPct`, then emptied over `seconds`. The forced
+// reflow commits the start value before the transition begins, otherwise both
+// writes are coalesced into one style update and the bar never moves.
+function runCountdown(seconds, fromPct = 100) {
+  const fill = $('aoBarFill');
+  fill.style.transition = 'none';
+  fill.style.width = `${fromPct}%`;
+  void fill.offsetWidth;
+  fill.style.transition = `width ${seconds}s linear`;
+  fill.style.width = '0%';
+}
+
 function showNextOverlay() {
   if (!overlayCfg) overlayQueue = [];   // disabled while a queue was pending
   const item = overlayQueue.shift();
@@ -3667,15 +3680,9 @@ function showNextOverlay() {
   box.classList.add('show');
   box.setAttribute('aria-hidden', 'false');
 
-  // Countdown bar, driven by the configured duration
   const duration = overlayCfg.duration || 10;
-  const fill = $('aoBarFill');
-  fill.style.transition = 'none';
-  fill.style.width = '100%';
-  requestAnimationFrame(() => {
-    fill.style.transition = `width ${duration}s linear`;
-    fill.style.width = '0%';
-  });
+  overlayDeadline = Date.now() + duration * 1000;
+  runCountdown(duration);
 
   clearTimeout(overlayTimer);
   overlayTimer = setTimeout(dismissOverlay, duration * 1000);
@@ -4450,6 +4457,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('fullscreenchange', () => {
     const fs = !!document.fullscreenElement;
     $('fullscreenBtn').classList.toggle('active', fs);
+    // Only the fullscreen element is painted, so the alert overlay has to move
+    // inside it -- from <body> it would simply not be visible. Re-parenting
+    // cancels the running transition, so the countdown restarts on what is left.
+    (document.fullscreenElement || document.body).appendChild($('alertOverlay'));
+    if (overlayVisible()) {
+      const left = Math.max(0, (overlayDeadline - Date.now()) / 1000);
+      runCountdown(left, left / (overlayCfg?.duration || 10) * 100);
+    }
     if (fs) {
       $('fsZoneBtn').classList.toggle('active', zonesVisible);
       $('fsTunnelBtn').classList.toggle('active', tunnelsVisible);

@@ -2,7 +2,7 @@
 
 **English** | [Francais](DOC.fr.md)
 
-Version: **0.24.0**
+Version: **0.24.1**
 
 ---
 
@@ -1302,6 +1302,8 @@ To return to the graph, click the **←** button in the header or press `Escape`
 A full-screen red overlay shown in the middle of the screen when a new alert appears. Configured by the [alert_overlay](#alert_overlay-section) section, which also defines which alerts are eligible and how "new" is decided.
 
 **Queue.** Overlays are displayed one after the other, `duration` seconds each. On a burst larger than `max_queue`, the extras are counted on the last overlay (`+N more alerts not shown`) instead of holding the screen hostage.
+
+**Fullscreen.** The overlay follows the graph into fullscreen. Only the fullscreen element is painted by the browser, so ProMLens moves the overlay inside `#netWrap` when fullscreen is entered and back to `<body>` when it is left. Re-parenting cancels the running CSS transition, so the countdown bar restarts on the time remaining.
 
 **Dismiss:**
 

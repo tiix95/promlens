@@ -2,7 +2,7 @@
 
 [English](DOC.md) | **Francais**
 
-Version : **0.24.0**
+Version : **0.24.1**
 
 ---
 
@@ -1302,6 +1302,8 @@ Pour revenir au graphe, cliquez sur le bouton **←** de l'en-tête ou appuyez s
 Une surcouche rouge plein écran affichée au milieu de l'écran à l'apparition d'une nouvelle alerte. Configurée par la section [alert_overlay](#section-alert_overlay), qui définit aussi les alertes éligibles et la façon dont la nouveauté est décidée.
 
 **File d'attente.** Les surcouches sont affichées l'une après l'autre, `duration` secondes chacune. Sur une rafale plus grande que `max_queue`, les surnuméraires sont comptées sur la dernière surcouche (`+N more alerts not shown`) au lieu de monopoliser l'écran.
+
+**Plein écran.** La surcouche suit le graphe en plein écran. Seul l'élément en plein écran est peint par le navigateur : ProMLens déplace donc la surcouche dans `#netWrap` à l'entrée en plein écran, et la remet dans `<body>` à la sortie. Le changement de parent annule la transition CSS en cours, donc la barre de compte à rebours repart sur le temps restant.
 
 **Fermeture :**
 
